@@ -1,0 +1,16 @@
+# Gmail MCP Client Requirements
+# Based on theposch/gmail-mcp repository
+
+# MCP SDK for client-server communication
+mcp>=1.1.2
+
+# Google API dependencies
+google-api-python-client>=2.156.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.2.1
+
+# HTTP client
+httpx>=0.28.1
+
+# Additional utilities
+python-dotenv>=1.0.0

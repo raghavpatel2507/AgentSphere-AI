@@ -15,7 +15,7 @@ def calculate_expression(expression: str) -> str:
     """Calculate a mathematical expression.and perform the arithmetical operations."""
     try:
         result = eval(expression, {"__builtins__": {}}, {})
-        return str("hellondmbdbdjsakb")
+        return str(result)
     except Exception as e:
         return f"Error: {str(e)}"
 

@@ -1,5 +1,5 @@
 from langchain.tools import tool
-from src.github_mcp_client import GitHubMCPClient
+from src.Github_MCP.github_mcp_client import GitHubMCPClient
 import base64
 import json
 import requests
@@ -19,6 +19,12 @@ def normalize_repo(repo: str):
     if "/" not in repo:
         return f"{OWNER}/{repo}"
     return repo
+
+def parse_repo(repo: str):
+    """Split repo string into owner and repo name."""
+    full_repo = normalize_repo(repo)
+    owner, repo_name = full_repo.split("/", 1)
+    return owner, repo_name
 
 
 # ==========================================================
@@ -185,12 +191,18 @@ def github_write_file(repo: str, path: str, content: str, message: str, approve:
 
 
 @tool("github_delete_file")
-def github_delete_file(repo: str, path: str, message: str):
+def github_delete_file(repo: str, path: str, message: str, branch: str = "main"):
     """Delete a file from a GitHub repository."""
-    repo = normalize_repo(repo)
+    owner, repo_name = parse_repo(repo)
     return client.call_tool(
         "delete_file",
-        {"repo": repo, "path": path, "message": message}
+        {
+            "owner": owner,
+            "repo": repo_name,
+            "path": path,
+            "message": message,
+            "branch": branch
+        }
     )
 
 
@@ -206,34 +218,45 @@ def github_create_repo(name: str, description: str = "", private: bool = False):
 @tool("github_create_branch")
 def github_create_branch(repo: str, branch: str, from_branch: str = "main"):
     """Create a new branch."""
-    repo = normalize_repo(repo)
+    owner, repo_name = parse_repo(repo)
     return client.call_tool(
         "create_branch",
-        {"repo": repo, "branch": branch, "from_branch": from_branch}
+        {
+            "owner": owner,
+            "repo": repo_name,
+            "branch": branch,
+            "from_branch": from_branch
+        }
     )
 
 
 @tool("github_list_branches")
 def github_list_branches(repo: str):
     """List all branches of a GitHub repository."""
-    repo = normalize_repo(repo)
-    return client.call_tool("list_branches", {"repo": repo})
+    owner, repo_name = parse_repo(repo)
+    return client.call_tool(
+        "list_branches", 
+        {"owner": owner, "repo": repo_name}
+    )
 
 
 @tool("github_list_tags")
 def github_list_tags(repo: str):
     """List all Git tags."""
-    repo = normalize_repo(repo)
-    return client.call_tool("list_tags", {"repo": repo})
+    owner, repo_name = parse_repo(repo)
+    return client.call_tool(
+        "list_tags", 
+        {"owner": owner, "repo": repo_name}
+    )
 
 
 @tool("github_list_commits")
 def github_list_commits(repo: str, per_page: int = 20):
     """List recent commits."""
-    repo = normalize_repo(repo)
+    owner, repo_name = parse_repo(repo)
     return client.call_tool(
         "list_commits",
-        {"repo": repo, "per_page": per_page}
+        {"owner": owner, "repo": repo_name, "per_page": per_page}
     )
 
 
@@ -241,14 +264,14 @@ def github_list_commits(repo: str, per_page: int = 20):
 @tool("github_push_files")
 def github_push_files(repo: str, files: list, message: str, branch: str = "main", approve: bool = None):
     """Push multiple files. If approve is not True, ask for approval first."""
-    repo = normalize_repo(repo)
-    key = f"push:{repo}:{branch}:{message}"
+    owner, repo_name = parse_repo(repo)
+    key = f"push:{owner}/{repo_name}:{branch}:{message}"
     if approve is not True:
-        _pending_approval[key] = {"repo": repo, "files": files, "message": message, "branch": branch}
+        _pending_approval[key] = {"repo": f"{owner}/{repo_name}", "files": files, "message": message, "branch": branch}
         return {
             "action": "awaiting_approval",
-            "prompt": f"Do you approve pushing files to {repo} on branch {branch}? (yes/no)",
-            "repo": repo,
+            "prompt": f"Do you approve pushing files to {owner}/{repo_name} on branch {branch}? (yes/no)",
+            "repo": f"{owner}/{repo_name}",
             "files": files,
             "message": message,
             "branch": branch
@@ -256,15 +279,24 @@ def github_push_files(repo: str, files: list, message: str, branch: str = "main"
     _pending_approval.pop(key, None)
     return client.call_tool(
         "push_files",
-        {"repo": repo, "files": files, "message": message, "branch": branch}
+        {
+            "owner": owner,
+            "repo": repo_name,
+            "files": files,
+            "message": message,
+            "branch": branch
+        }
     )
 
 
 @tool("github_fork_repo")
 def github_fork_repo(repo: str):
     """Fork a GitHub repository."""
-    repo = normalize_repo(repo)
-    return client.call_tool("fork_repository", {"repo": repo})
+    owner, repo_name = parse_repo(repo)
+    return client.call_tool(
+        "fork_repository", 
+        {"owner": owner, "repo": repo_name}
+    )
 
 
 @tool("github_search_code")
@@ -279,39 +311,48 @@ def github_search_code(query: str, repo: str = None):
 @tool("github_get_commit")
 def github_get_commit(repo: str, sha: str):
     """Get commit details."""
-    repo = normalize_repo(repo)
-    return client.call_tool("get_commit", {"repo": repo, "sha": sha})
+    owner, repo_name = parse_repo(repo)
+    return client.call_tool(
+        "get_commit", 
+        {"owner": owner, "repo": repo_name, "sha": sha}
+    )
 
 
 @tool("github_list_releases")
 def github_list_releases(repo: str):
     """List releases."""
-    repo = normalize_repo(repo)
-    return client.call_tool("list_releases", {"repo": repo})
+    owner, repo_name = parse_repo(repo)
+    return client.call_tool(
+        "list_releases", 
+        {"owner": owner, "repo": repo_name}
+    )
 
 
 @tool("github_get_latest_release")
 def github_get_latest_release(repo: str):
     """Get latest release."""
-    repo = normalize_repo(repo)
-    return client.call_tool("get_latest_release", {"repo": repo})
+    owner, repo_name = parse_repo(repo)
+    return client.call_tool(
+        "get_latest_release", 
+        {"owner": owner, "repo": repo_name}
+    )
 
 
 @tool("github_get_release_by_tag")
 def github_get_release_by_tag(repo: str, tag: str):
     """Get release by tag."""
-    repo = normalize_repo(repo)
+    owner, repo_name = parse_repo(repo)
     return client.call_tool(
         "get_release_by_tag",
-        {"repo": repo, "tag": tag}
+        {"owner": owner, "repo": repo_name, "tag": tag}
     )
 
 
 @tool("github_get_tag")
 def github_get_tag(repo: str, tag: str):
     """Get tag metadata."""
-    repo = normalize_repo(repo)
+    owner, repo_name = parse_repo(repo)
     return client.call_tool(
         "get_tag",
-        {"repo": repo, "tag": tag}
+        {"owner": owner, "repo": repo_name, "tag": tag}
     )
