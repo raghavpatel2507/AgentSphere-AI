@@ -1,0 +1,21 @@
+langchain==1.0.7
+langgraph==1.0.3
+langchain-groq==1.0.1
+langgraph-supervisor==0.0.30
+python-dotenv
+langchain-community==0.4.1
+ddgs==9.9.1
+duckduckgo-search==8.1.1
+langchain-google-genai==0.0.1
+google-generativeai==0.3.2
+langchain-core==1.0.5
+langchain-openai==1.0.3
+langchain-experimental
+
+# Gmail MCP Dependencies
+mcp>=1.1.2
+email-validator
+google-api-python-client>=2.156.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.2.1
+httpx>=0.28.1
