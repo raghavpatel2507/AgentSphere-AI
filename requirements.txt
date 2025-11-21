@@ -1,21 +1,59 @@
+# ============================================
+# CORE LANGCHAIN DEPENDENCIES
+# ============================================
 langchain==1.0.7
-langgraph==1.0.3
-langchain-groq==1.0.1
-langgraph-supervisor==0.0.30
-python-dotenv
+langchain-core==1.0.5
 langchain-community==0.4.1
-ddgs==9.9.1
-duckduckgo-search==8.1.1
+langchain-experimental>=0.4.0
+langgraph==1.0.3
+langgraph-supervisor==0.0.30
+
+# ============================================
+# LLM PROVIDERS
+# ============================================
+langchain-groq==1.0.1
+langchain-openai==1.0.3
 langchain-google-genai==0.0.1
 google-generativeai==0.3.2
-langchain-core==1.0.5
-langchain-openai==1.0.3
-langchain-experimental
 
-# Gmail MCP Dependencies
+# ============================================
+# SEARCH & WEB TOOLS
+# ============================================
+ddgs==9.9.1
+duckduckgo-search==8.1.1
+google-search-results>=2.4.2
+
+# ============================================
+# MCP (Model Context Protocol) DEPENDENCIES
+# ============================================
 mcp>=1.1.2
-email-validator
+httpx>=0.28.1
+email-validator>=2.3.0
+
+# ============================================
+# GOOGLE API DEPENDENCIES (Gmail MCP)
+# ============================================
 google-api-python-client>=2.156.0
 google-auth-httplib2>=0.2.0
 google-auth-oauthlib>=1.2.1
-httpx>=0.28.1
+
+# ============================================
+# POSTGRESQL & DATABASE DEPENDENCIES
+# ============================================
+langgraph-checkpoint-postgres>=1.0.0
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.9
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+
+# ============================================
+# UTILITIES
+# ============================================
+python-dotenv>=1.0.0
+numexpr>=2.14.1
+
+# ============================================
+# WINDOWS-SPECIFIC DEPENDENCIES
+# ============================================
+# Required for MCP on Windows
+pywin32>=311

@@ -5,6 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "alembic>=1.17.2",
+    "asyncpg>=0.30.0",
     "ddgs==9.9.1",
     "duckduckgo-search==8.1.1",
     "email-validator>=2.3.0",
@@ -22,8 +24,12 @@ dependencies = [
     "langchain-groq==1.0.1",
     "langchain-openai==1.0.3",
     "langgraph==1.0.3",
+    "langgraph-checkpoint-postgres>=3.0.1",
     "langgraph-supervisor==0.0.30",
     "mcp>=1.1.2",
     "numexpr>=2.14.1",
+    "psycopg2-binary>=2.9.11",
+    "psycopg[binary]>=3.2.12",
     "python-dotenv>=1.0.0",
+    "sqlalchemy>=2.0.44",
 ]

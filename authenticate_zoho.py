@@ -9,8 +9,8 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 # Configuration
-CREDENTIALS_FILE = "src/Zoho_MCP/credentials.json"
-TOKEN_FILE = "src/Zoho_MCP/token.json"
+CREDENTIALS_FILE = "src/configs/zoho_credential.json"
+TOKEN_FILE = "src/configs/zoho_token.json"
 REDIRECT_PORT = 8099
 REDIRECT_URI = f"http://localhost:{REDIRECT_PORT}/callback"
 SCOPES = "ZohoBooks.fullaccess.all"
@@ -184,7 +184,9 @@ def main():
     if "refresh_token" not in token_data:
         print("\n❌ Failed to get refresh token")
         print(token_data)
-        return
+        if server_instance:
+            server_instance.shutdown()
+        sys.exit(1)
 
     refresh_token = token_data["refresh_token"]
     access_token = token_data["access_token"]
@@ -201,10 +203,14 @@ def main():
     else:
         print("⚠ Could not fetch organization ID")
 
+    # Shutdown server
     if server_instance:
         server_instance.shutdown()
 
     print("\n🎉 Setup Complete!")
+    
+    # Exit cleanly
+    sys.exit(0)
 
 
 if __name__ == "__main__":

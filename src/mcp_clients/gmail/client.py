@@ -35,6 +35,9 @@ class GmailMCPClient:
             self.session: Optional[ClientSession] = None
             self.exit_stack = AsyncExitStack()
             
+            # Lock to serialize MCP requests (prevent parallel calls)
+            self._request_lock = asyncio.Lock()
+            
             # Dedicated event loop for this client
             self._loop = asyncio.new_event_loop()
             self._thread = threading.Thread(target=self._start_loop, daemon=True)
@@ -52,45 +55,102 @@ class GmailMCPClient:
         if self.session is not None:
             return  # Already connected
         
-        # Configure server parameters
-        server_params = StdioServerParameters(
-            command=sys.executable,
-            args=[
-                self.server_script_path,
-                "--creds-file-path", self.credentials_path,
-                "--token-path", self.token_path
-            ],
-            env=None
-        )
-        
-        # Create stdio client connection
-        stdio_transport = await self.exit_stack.enter_async_context(
-            stdio_client(server_params)
-        )
-        
-        # Create session
-        self.session = await self.exit_stack.enter_async_context(
-            ClientSession(stdio_transport[0], stdio_transport[1])
-        )
-        
-        # Initialize session
-        await self.session.initialize()
+        try:
+            # Configure server parameters
+            server_params = StdioServerParameters(
+                command=sys.executable,
+                args=[
+                    self.server_script_path,
+                    "--creds-file-path", self.credentials_path,
+                    "--token-path", self.token_path
+                ],
+                env=None
+            )
+            
+            # Create stdio client connection
+            stdio_transport = await self.exit_stack.enter_async_context(
+                stdio_client(server_params)
+            )
+            
+            # Create session
+            self.session = await self.exit_stack.enter_async_context(
+                ClientSession(stdio_transport[0], stdio_transport[1])
+            )
+            
+            # Initialize session
+            await self.session.initialize()
+            print("✅ Gmail MCP server connected successfully")
+        except Exception as e:
+            print(f"❌ Failed to connect to Gmail MCP server: {e}")
+            self.session = None
+            raise
+    
+    async def _reconnect(self):
+        """Reconnect to the MCP server after connection loss"""
+        print("🔄 Attempting to reconnect to Gmail MCP server...")
+        try:
+            # Close existing connection
+            if self.exit_stack:
+                try:
+                    await self.exit_stack.aclose()
+                except Exception:
+                    pass
+            
+            # Reset state
+            self.session = None
+            self.exit_stack = AsyncExitStack()
+            
+            # Reconnect
+            await self._connect()
+            print("✅ Reconnected to Gmail MCP server")
+        except Exception as e:
+            print(f"❌ Reconnection failed: {e}")
+            raise
     
     async def _call_tool(self, tool_name: str, arguments: dict):
-        """Internal async tool call"""
-        if self.session is None:
-            await self._connect()
-        
-        result = await self.session.call_tool(tool_name, arguments)
-        
-        # Extract content from MCP response
-        if hasattr(result, 'content') and result.content:
-            if isinstance(result.content, list) and len(result.content) > 0:
-                content_item = result.content[0]
-                if hasattr(content_item, 'text'):
-                    return content_item.text
-        
-        return str(result)
+        """Internal async tool call with automatic reconnection and request serialization"""
+        # Acquire lock to serialize requests (prevent parallel calls)
+        async with self._request_lock:
+            max_retries = 2
+            retry_count = 0
+            
+            while retry_count <= max_retries:
+                try:
+                    if self.session is None:
+                        await self._connect()
+                    
+                    result = await self.session.call_tool(tool_name, arguments)
+                    
+                    # Extract content from MCP response
+                    if hasattr(result, 'content') and result.content:
+                        if isinstance(result.content, list) and len(result.content) > 0:
+                            content_item = result.content[0]
+                            if hasattr(content_item, 'text'):
+                                return content_item.text
+                    
+                    return str(result)
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    if "Connection closed" in error_msg or "connection" in error_msg.lower():
+                        if retry_count < max_retries:
+                            print(f"⚠️  Connection lost, retrying ({retry_count + 1}/{max_retries})...")
+                            retry_count += 1
+                            try:
+                                await self._reconnect()
+                                continue  # Retry the tool call
+                            except Exception as reconnect_error:
+                                print(f"❌ Reconnection failed: {reconnect_error}")
+                        else:
+                            print(f"❌ Max retries reached. Gmail MCP server may have crashed.")
+                            print(f"💡 Try running: python authenticate_gmail.py to refresh credentials")
+                            raise Exception(f"Gmail MCP connection failed after {max_retries} retries: {error_msg}")
+                    else:
+                        # Non-connection error, raise immediately
+                        print(f"❌ Gmail MCP tool error: {error_msg}")
+                        raise
+            
+            raise Exception("Failed to execute Gmail tool after multiple retries")
         
     async def _list_tools(self) -> List[McpTool]:
         if self.session is None:

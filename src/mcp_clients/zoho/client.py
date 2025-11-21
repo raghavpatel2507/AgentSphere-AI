@@ -47,6 +47,9 @@ class ZohoMCPClient:
             self.session: Optional[ClientSession] = None
             self.exit_stack = AsyncExitStack()
             
+            # Lock to serialize MCP requests (prevent parallel calls)
+            self._request_lock = asyncio.Lock()
+            
             # Dedicated event loop for this client
             self._loop = asyncio.new_event_loop()
             self._thread = threading.Thread(target=self._start_loop, daemon=True)
@@ -155,18 +158,20 @@ class ZohoMCPClient:
     # Call MCP Tool (Async implementation)
     # ------------------------------------------------------
     async def _call_tool(self, tool_name: str, arguments: dict):
-        if self.session is None:
-            await self._connect()
+        # Acquire lock to serialize requests (prevent parallel calls)
+        async with self._request_lock:
+            if self.session is None:
+                await self._connect()
 
-        response = await self.session.call_tool(tool_name, arguments)
+            response = await self.session.call_tool(tool_name, arguments)
 
-        # Extract text output
-        if hasattr(response, "content") and response.content:
-            item = response.content[0]
-            if hasattr(item, "text"):
-                return item.text
+            # Extract text output
+            if hasattr(response, "content") and response.content:
+                item = response.content[0]
+                if hasattr(item, "text"):
+                    return item.text
 
-        return str(response)
+            return str(response)
         
     async def _list_tools(self) -> List[McpTool]:
         if self.session is None:

@@ -135,7 +135,7 @@ zoho_agent = create_agent(
 filesystem_agent = create_agent(
     model=model,
     tools=filesystem_tools, # Dynamically loaded tools
-    name="filesystem_agent",
+    name="filesystem_expert",
     system_prompt=system_prompt_filesystem_mcp
 )
 
