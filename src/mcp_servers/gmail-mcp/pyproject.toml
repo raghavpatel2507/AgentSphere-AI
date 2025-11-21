@@ -1,0 +1,19 @@
+[project]
+name = "gmail"
+version = "0.1.0"
+description = "Model Context Protocol server for gmail"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "mcp>=1.1.2",
+    "google-api-python-client>=2.156.0",
+    "google-auth-httplib2>=0.2.0",
+    "google-auth-oauthlib>=1.2.1",
+]
+[build-system]
+requires = [ "hatchling",]
+build-backend = "hatchling.build"
+
+[project.scripts]
+gmail = "gmail:main"

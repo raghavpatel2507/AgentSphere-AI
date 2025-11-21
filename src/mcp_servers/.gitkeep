@@ -1,2 +1,0 @@
-# This file ensures the mcp_servers directory is tracked by git
-# while ignoring all server code within it (external dependencies)
