@@ -33,8 +33,8 @@ class ZohoMCPClient:
 
     def __init__(self):
         if not self._initialized:
-            self.credentials_file = "C:/Users/logicrays/Desktop/projects/AgentSphere-AI/src/configs/zoho_credential.json"
-            self.token_file = "C:/Users/logicrays/Desktop/projects/AgentSphere-AI/src/configs/zoho_token.json"
+            self.credentials_file = "src/configs/zoho_credential.json"
+            self.token_file = "src/configs/zoho_token.json"
 
             self.client_id: Optional[str] = None
             self.client_secret: Optional[str] = None
@@ -103,7 +103,7 @@ class ZohoMCPClient:
             self._load_credentials()
 
         # Detect your local zoho-mcp folder
-        server_project_root = "C:/Users/logicrays/Desktop/projects/AgentSphere-AI/src/mcp_servers/zoho-mcp"
+        server_project_root = "src/mcp_servers/zoho-mcp"
         server_module_dir = server_project_root
         server_module = "zoho_mcp.server"
 

@@ -4,23 +4,22 @@ from src.core.agents.model import model
 from src.core.tools.custom_tools import *
 from src.core.agents.system_prompt import *
 from src.Figma_MCP.figma_tools import *
-# from src.Gmail_MCP.gmail_tools import * # Removed static imports
-# from src.Zoho_MCP.zoho_tools import * # Removed static imports
+
 
 import asyncio
 from src.core.tools import load_mcp_tools_sync
 from src.mcp_clients.gmail import GmailMCPClient
 from src.mcp_clients.zoho import ZohoMCPClient
 from src.mcp_clients.github import GithubMCPClient
+from src.mcp_clients.Filesystem.client import FilesystemMCPClient
+
 
 # Initialize MCP tools dynamically (Synchronous)
 def init_mcp_tools():
     gmail_client = GmailMCPClient()
     try:
-        # load_mcp_tools_sync handles connection and listing via background thread
+       
         gmail_tools = load_mcp_tools_sync(gmail_client)
-        # We don't close the client here because we want to keep the background thread running
-        # for the agent to use. The client is a singleton anyway.
     except Exception as e:
         print(f"Error loading Gmail MCP tools: {e}")
         gmail_tools = []
@@ -45,16 +44,30 @@ def init_github_tools():
         github_tools = []
     return github_tools
 
+def init_filesystem_tools():
+    fs_client = FilesystemMCPClient()
+    try:
+        fs_tools = load_mcp_tools_sync(fs_client)
+    except Exception as e:
+        print(f"Error loading Filesystem MCP tools: {e}")
+        fs_tools = []
+    return fs_tools
+
+
 # Load tools synchronously for module-level definition
 try:
     gmail_tools = init_mcp_tools()
     zoho_tools = init_zoho_tools()
     github_tools = init_github_tools()
+    filesystem_tools = init_filesystem_tools()
+    
 except Exception as e:
     print(f"Warning: Error initializing MCP tools: {e}")
     gmail_tools = []
     zoho_tools = []
     github_tools = []
+    filesystem_tools = []
+    whatsapp_tools = []
 
 
 #------------------------------This agent used for The mathmatical calculation------------------------------#
@@ -107,6 +120,7 @@ gmail_agent = create_agent(
 #     ],
 #     name="figma_expert",
 #     system_prompt=system_prompt_figma_mcp
+
 # )#------------------------------This agent used for Zoho Books MCP operations------------------------------#
 zoho_agent = create_agent(
     model=model,
@@ -114,3 +128,15 @@ zoho_agent = create_agent(
     name="zoho_expert",
     system_prompt=system_prompt_zoho_mcp
 )
+
+
+
+#------------------------------This agent used for Filesystem MCP operations------------------------------#
+filesystem_agent = create_agent(
+    model=model,
+    tools=filesystem_tools, # Dynamically loaded tools
+    name="filesystem_agent",
+    system_prompt=system_prompt_filesystem_mcp
+)
+
+#------------------------------This agent used for WhatsApp MCP operations------------------------------#
