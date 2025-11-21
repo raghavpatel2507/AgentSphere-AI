@@ -179,16 +179,6 @@ src/configs/*.json
 src/configs/*.token
 !src/configs/.gitkeep
 
-# MCP Server Directories (external dependencies)
-src/mcp_servers/
-!src/mcp_servers/.gitkeep
-
-# Old directories (if they still exist)
-src/Gmail_MCP/
-src/Zoho_MCP/
-src/Github_MCP/
-src/external_zoho_mcp/
-
 # Test files and temporary scripts
 tests/__pycache__/
 *.test.py
