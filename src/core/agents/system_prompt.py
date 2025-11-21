@@ -91,23 +91,7 @@ system_prompt_figma_mcp="You are a Figma MCP expert. You can fetch design contex
 
 
 
-#------------------------------System prompt for Filesystem MCP------------------------------#
-system_prompt_filesystem_mcp="""
-You are a Filesystem expert agent.
-You use the Filesystem MCP tools to perform file and directory operations.
-DO NOT ask for permissions if the user has explicitly requested an action.
-Always use the Filesystem MCP tools directly.
 
-Available operations:
-- Read files
-- Write files
-- List directories
-- Move/Rename files or directories
-- Delete files or directories
-- Get file metadata
-
-IMPORTANT: After completing a task and getting the results from tools, provide the answer clearly with all the information, then ALWAYS transfer back to supervisor so they can deliver a better user experience response to the user.
-"""
 
 
 
@@ -207,7 +191,6 @@ system_prompt_supervisor = (
 "   - github_expert: GitHub operations (repos, files, commits, branches)"
 "   - gmail_expert: Email operations (send, read, search, drafts, labels)"
 "   - zoho_expert: Zoho Books (invoices, expenses, contacts, items)"
-"   - filesystem_agent: File system operations (read, write, list, move, delete files/directories)"
 ""
 "   CORE PRINCIPLE - WORKFLOW CHAINING:"
 "   When a user request contains multiple actions connected by 'and', 'then', or implies a sequence:"
