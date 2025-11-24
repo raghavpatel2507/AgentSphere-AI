@@ -79,7 +79,7 @@ class ZohoMCPClient:
 
         if not os.path.exists(self.token_file):
             raise FileNotFoundError(
-                f"Missing token.json: {self.token_file}. Run authenticate_zoho.py first."
+                f"Missing token.json: {self.token_file}. Run authentication/authenticate_zoho.py first."
             )
 
         with open(self.token_file, "r") as f:
@@ -92,7 +92,7 @@ class ZohoMCPClient:
             raise ValueError("refresh_token missing in token.json")
 
         if not self.access_token:
-            raise ValueError("access_token missing in token.json — re-run authenticate_zoho.py")
+            raise ValueError("access_token missing in token.json — re-run authentication/authenticate_zoho.py")
 
     # ------------------------------------------------------
     # Connect to MCP Server (Async implementation)

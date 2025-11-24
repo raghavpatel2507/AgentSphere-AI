@@ -19,7 +19,7 @@
 ### Step 1: Run the OAuth Script
 
 ```bash
-python authenticate_gmail.py
+python authentication/authenticate_gmail.py
 ```
 
 ### Step 2: Complete Browser Authentication
@@ -66,12 +66,12 @@ src/configs/
 - Save it in the correct location: `src/configs/gmail_credential.json`
 
 ### Error: Token expired
-- Run `python authenticate_gmail.py` again to refresh the token
+- Run `python authentication/authenticate_gmail.py` again to refresh the token
 - The script will automatically handle token refresh
 
 ### Error: Port 8098 already in use
 - Close any application using port 8098
-- Or modify `REDIRECT_PORT` in `authenticate_gmail.py`
+- Or modify `REDIRECT_PORT` in `authentication/authenticate_gmail.py`
 
 ## Security Notes
 
@@ -81,5 +81,5 @@ src/configs/
 
 To switch to a different Gmail account:
 1. Delete `src/configs/gmail_token.json`
-2. Run `python authenticate_gmail.py` again
+2. Run `python authentication/authenticate_gmail.py` again
 3. Authenticate with the new account

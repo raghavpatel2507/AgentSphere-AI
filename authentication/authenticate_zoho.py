@@ -9,8 +9,8 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 # Configuration
-CREDENTIALS_FILE = "src/configs/zoho_credential.json"
-TOKEN_FILE = "src/configs/zoho_token.json"
+CREDENTIALS_FILE = "../src/configs/zoho_credential.json"
+TOKEN_FILE = "../src/configs/zoho_token.json"
 REDIRECT_PORT = 8099
 REDIRECT_URI = f"http://localhost:{REDIRECT_PORT}/callback"
 SCOPES = "ZohoBooks.fullaccess.all"

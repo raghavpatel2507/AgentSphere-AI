@@ -143,7 +143,7 @@ class GmailMCPClient:
                                 print(f"❌ Reconnection failed: {reconnect_error}")
                         else:
                             print(f"❌ Max retries reached. Gmail MCP server may have crashed.")
-                            print(f"💡 Try running: python authenticate_gmail.py to refresh credentials")
+                            print(f"💡 Try running: python authentication/authenticate_gmail.py to refresh credentials")
                             raise Exception(f"Gmail MCP connection failed after {max_retries} retries: {error_msg}")
                     else:
                         # Non-connection error, raise immediately

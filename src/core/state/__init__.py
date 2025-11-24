@@ -6,6 +6,10 @@ from .thread_manager import (
     parse_thread_id,
     get_config_for_thread,
     SessionManager,
+    get_or_create_session,
+    save_current_session,
+    load_current_session,
+    clear_current_session,
 )
 
 __all__ = [
@@ -16,4 +20,8 @@ __all__ = [
     "parse_thread_id",
     "get_config_for_thread",
     "SessionManager",
+    "get_or_create_session",
+    "save_current_session",
+    "load_current_session",
+    "clear_current_session",
 ]

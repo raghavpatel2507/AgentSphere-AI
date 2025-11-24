@@ -12,8 +12,8 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 # Configuration
-CREDENTIALS_FILE = "src/configs/gmail_credential.json"
-TOKEN_FILE = "src/configs/gmail_token.json"
+CREDENTIALS_FILE = "../src/configs/gmail_credential.json"
+TOKEN_FILE = "../src/configs/gmail_token.json"
 REDIRECT_PORT = 8098
 REDIRECT_URI = f"http://localhost:{REDIRECT_PORT}/callback"
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']

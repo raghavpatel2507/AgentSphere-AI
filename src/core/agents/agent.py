@@ -11,7 +11,6 @@ from src.core.tools import load_mcp_tools_sync
 from src.mcp_clients.gmail import GmailMCPClient
 from src.mcp_clients.zoho import ZohoMCPClient
 from src.mcp_clients.github import GithubMCPClient
-from src.mcp_clients.Filesystem.client import FilesystemMCPClient
 
 
 # Initialize MCP tools dynamically (Synchronous)
@@ -44,14 +43,7 @@ def init_github_tools():
         github_tools = []
     return github_tools
 
-def init_filesystem_tools():
-    fs_client = FilesystemMCPClient()
-    try:
-        fs_tools = load_mcp_tools_sync(fs_client)
-    except Exception as e:
-        print(f"Error loading Filesystem MCP tools: {e}")
-        fs_tools = []
-    return fs_tools
+
 
 
 # Load tools synchronously for module-level definition
@@ -59,14 +51,12 @@ try:
     gmail_tools = init_mcp_tools()
     zoho_tools = init_zoho_tools()
     github_tools = init_github_tools()
-    filesystem_tools = init_filesystem_tools()
     
 except Exception as e:
     print(f"Warning: Error initializing MCP tools: {e}")
     gmail_tools = []
     zoho_tools = []
     github_tools = []
-    filesystem_tools = []
     whatsapp_tools = []
 
 
@@ -131,12 +121,6 @@ zoho_agent = create_agent(
 
 
 
-#------------------------------This agent used for Filesystem MCP operations------------------------------#
-filesystem_agent = create_agent(
-    model=model,
-    tools=filesystem_tools, # Dynamically loaded tools
-    name="filesystem_expert",
-    system_prompt=system_prompt_filesystem_mcp
-)
+
 
 #------------------------------This agent used for WhatsApp MCP operations------------------------------#

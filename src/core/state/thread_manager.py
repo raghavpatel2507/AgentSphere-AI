@@ -154,3 +154,88 @@ class SessionManager:
             list[dict]: List of session information dicts
         """
         return list(self.active_sessions.values())
+
+
+# ============================================
+# Session File Management for CLI
+# ============================================
+
+import json
+from pathlib import Path
+from typing import Optional
+
+
+def get_session_file_path() -> Path:
+    """Get path to session file for storing current active thread."""
+    session_dir = Path.home() / ".agentsphere"
+    session_dir.mkdir(exist_ok=True)
+    return session_dir / "current_session.json"
+
+
+def save_current_session(thread_id: str, tenant_id: str):
+    """
+    Save current session to file.
+    
+    Args:
+        thread_id: The thread ID to save
+        tenant_id: The tenant ID
+    """
+    session_file = get_session_file_path()
+    session_data = {
+        "thread_id": thread_id,
+        "tenant_id": tenant_id,
+        "last_active": None,  # Could add timestamp if needed
+    }
+    with open(session_file, "w") as f:
+        json.dump(session_data, f, indent=2)
+
+
+def load_current_session() -> Optional[dict]:
+    """
+    Load current session from file.
+    
+    Returns:
+        dict with thread_id and tenant_id, or None if no session found
+    """
+    session_file = get_session_file_path()
+    if not session_file.exists():
+        return None
+    
+    try:
+        with open(session_file, "r") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def clear_current_session():
+    """Clear the current session file."""
+    session_file = get_session_file_path()
+    if session_file.exists():
+        session_file.unlink()
+
+
+def get_or_create_session(tenant_id: str) -> tuple[str, bool]:
+    """
+    Get existing session or create new one.
+    
+    Args:
+        tenant_id: The tenant ID
+        
+    Returns:
+        tuple of (thread_id, is_new_session)
+    """
+    # Try to load existing session
+    session = load_current_session()
+    
+    if session and session.get("tenant_id") == tenant_id:
+        # Resume existing session
+        thread_id = session["thread_id"]
+        return thread_id, False
+    
+    # Create new session
+    import uuid
+    conversation_id = str(uuid.uuid4())[:8]
+    thread_id = create_thread_id(tenant_id, conversation_id)
+    save_current_session(thread_id, tenant_id)
+    return thread_id, True
