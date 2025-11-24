@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Any, Callable, Dict, Type
+from typing import List, Any, Callable, Dict, Type, Optional, Union
 from langchain_core.tools import Tool, StructuredTool
 from pydantic import create_model, BaseModel, Field
 
@@ -44,9 +44,15 @@ def load_mcp_tools_sync(client_wrapper: Any) -> List[Tool]:
             elif prop_def.get("type") == "object":
                 prop_type = dict
                 
-            # Handle optional fields
+            # Handle optional fields with nullable defaults
             if prop_name not in required:
-                fields[prop_name] = (prop_type, Field(default=None, description=prop_def.get("description", "")))
+                # Check if the default is null - if so, make it Optional
+                default_value = prop_def.get("default")
+                if default_value is None or default_value == "null":
+                    # Use Optional type to allow None values
+                    fields[prop_name] = (Optional[prop_type], Field(default=None, description=prop_def.get("description", "")))
+                else:
+                    fields[prop_name] = (prop_type, Field(default=default_value, description=prop_def.get("description", "")))
             else:
                 fields[prop_name] = (prop_type, Field(..., description=prop_def.get("description", "")))
                 
@@ -56,15 +62,19 @@ def load_mcp_tools_sync(client_wrapper: Any) -> List[Tool]:
         else:
             ArgsModel = create_model(f"{tool_name}Args", **fields)
 
-        # Define the synchronous runner
+        # Define the synchronous runner with None filtering
         def _run_tool_sync(t_name=tool_name, **kwargs):
-            return client_wrapper.call_tool_sync(t_name, kwargs)
+            # Filter out None values to avoid passing null to MCP tools
+            filtered_kwargs = {k: v for k, v in kwargs.items() if v is not None}
+            return client_wrapper.call_tool_sync(t_name, filtered_kwargs)
 
         # Define the asynchronous runner (wraps sync call in thread for now)
         async def _run_tool_async(t_name=tool_name, **kwargs):
+            # Filter out None values to avoid passing null to MCP tools
+            filtered_kwargs = {k: v for k, v in kwargs.items() if v is not None}
             # This runs the sync call (which submits to background thread) in a thread pool
             # to avoid blocking the main loop.
-            return await asyncio.to_thread(client_wrapper.call_tool_sync, t_name, kwargs)
+            return await asyncio.to_thread(client_wrapper.call_tool_sync, t_name, filtered_kwargs)
 
         lc_tool = StructuredTool.from_function(
             func=_run_tool_sync,
@@ -76,3 +86,4 @@ def load_mcp_tools_sync(client_wrapper: Any) -> List[Tool]:
         lc_tools.append(lc_tool)
         
     return lc_tools
+

@@ -1,8 +1,8 @@
 """
-Gmail MCP Client
-================
-Simplified client for Gmail MCP server using stdio communication.
-Thread-safe version using a dedicated background event loop.
+Discord MCP Client
+==================
+Thread-safe client for Discord MCP server using stdio communication.
+Follows the same pattern as Gmail and Zoho MCP clients.
 """
 
 import asyncio
@@ -16,8 +16,8 @@ from mcp.client.stdio import stdio_client
 from mcp.types import Tool as McpTool
 
 
-class GmailMCPClient:
-    """Singleton client for Gmail MCP server"""
+class DiscordMCPClient:
+    """Singleton client for Discord MCP server"""
     
     _instance = None
     _initialized = False
@@ -29,9 +29,9 @@ class GmailMCPClient:
     
     def __init__(self):
         if not self._initialized:
-            self.server_script_path = "src/mcp_servers/gmail-mcp/src/gmail/server.py"
-            self.credentials_path = "src/configs/gmail_credential.json"
-            self.token_path = "src/configs/gmail_token.json"
+            # Use the Discord MCP server as a module
+            # The discord_mcp module is in src/mcp_servers/discord-mcp/src/
+            self.server_module_dir = "src/mcp_servers/discord-mcp/src"
             self.session: Optional[ClientSession] = None
             self.exit_stack = AsyncExitStack()
             
@@ -56,15 +56,30 @@ class GmailMCPClient:
             return  # Already connected
         
         try:
-            # Configure server parameters
+            # Load Discord credentials from environment
+            discord_email = os.getenv("DISCORD_EMAIL")
+            discord_password = os.getenv("DISCORD_PASSWORD")
+            
+            if not discord_email or not discord_password:
+                raise ValueError(
+                    "DISCORD_EMAIL and DISCORD_PASSWORD must be set in .env file"
+                )
+            
+            # Configure server parameters - run as module to avoid relative import issues
             server_params = StdioServerParameters(
                 command=sys.executable,
                 args=[
-                    self.server_script_path,
-                    "--creds-file-path", self.credentials_path,
-                    "--token-path", self.token_path
+                    "-m", "discord_mcp.server"
                 ],
-                env=None
+                env={
+                    "PYTHONPATH": self.server_module_dir,
+                    "DISCORD_EMAIL": discord_email,
+                    "DISCORD_PASSWORD": discord_password,
+                    "DISCORD_HEADLESS": os.getenv("DISCORD_HEADLESS", "true"),
+                    "DISCORD_GUILD_IDS": os.getenv("DISCORD_GUILD_IDS", ""),
+                    "MAX_MESSAGES_PER_CHANNEL": os.getenv("MAX_MESSAGES_PER_CHANNEL", "200"),
+                    "DEFAULT_HOURS_BACK": os.getenv("DEFAULT_HOURS_BACK", "24"),
+                }
             )
             
             # Create stdio client connection
@@ -79,15 +94,15 @@ class GmailMCPClient:
             
             # Initialize session
             await self.session.initialize()
-            print("✅ Gmail MCP server connected successfully")
+            print("✅ Discord MCP server connected successfully")
         except Exception as e:
-            print(f"❌ Failed to connect to Gmail MCP server: {e}")
+            print(f"❌ Failed to connect to Discord MCP server: {e}")
             self.session = None
             raise
     
     async def _reconnect(self):
         """Reconnect to the MCP server after connection loss"""
-        print("🔄 Attempting to reconnect to Gmail MCP server...")
+        print("🔄 Attempting to reconnect to Discord MCP server...")
         try:
             # Close existing connection
             if self.exit_stack:
@@ -102,7 +117,7 @@ class GmailMCPClient:
             
             # Reconnect
             await self._connect()
-            print("✅ Reconnected to Gmail MCP server")
+            print("✅ Reconnected to Discord MCP server")
         except Exception as e:
             print(f"❌ Reconnection failed: {e}")
             raise
@@ -142,15 +157,15 @@ class GmailMCPClient:
                             except Exception as reconnect_error:
                                 print(f"❌ Reconnection failed: {reconnect_error}")
                         else:
-                            print(f"❌ Max retries reached. Gmail MCP server may have crashed.")
-                            print(f"💡 Try running: python authenticate_gmail.py to refresh credentials")
-                            raise Exception(f"Gmail MCP connection failed after {max_retries} retries: {error_msg}")
+                            print(f"❌ Max retries reached. Discord MCP server may have crashed.")
+                            print(f"💡 Check Discord credentials in .env file")
+                            raise Exception(f"Discord MCP connection failed after {max_retries} retries: {error_msg}")
                     else:
                         # Non-connection error, raise immediately
-                        print(f"❌ Gmail MCP tool error: {error_msg}")
+                        print(f"❌ Discord MCP tool error: {error_msg}")
                         raise
             
-            raise Exception("Failed to execute Gmail tool after multiple retries")
+            raise Exception("Failed to execute Discord tool after multiple retries")
         
     async def _list_tools(self) -> List[McpTool]:
         if self.session is None:

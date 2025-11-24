@@ -1,8 +1,8 @@
 """
-Gmail MCP Client
-================
-Simplified client for Gmail MCP server using stdio communication.
-Thread-safe version using a dedicated background event loop.
+FileSystem MCP Client
+=====================
+Thread-safe client for FileSystem MCP server using stdio communication.
+Follows the same pattern as Gmail and Zoho MCP clients.
 """
 
 import asyncio
@@ -16,8 +16,8 @@ from mcp.client.stdio import stdio_client
 from mcp.types import Tool as McpTool
 
 
-class GmailMCPClient:
-    """Singleton client for Gmail MCP server"""
+class FileSystemMCPClient:
+    """Singleton client for FileSystem MCP server"""
     
     _instance = None
     _initialized = False
@@ -29,9 +29,7 @@ class GmailMCPClient:
     
     def __init__(self):
         if not self._initialized:
-            self.server_script_path = "src/mcp_servers/gmail-mcp/src/gmail/server.py"
-            self.credentials_path = "src/configs/gmail_credential.json"
-            self.token_path = "src/configs/gmail_token.json"
+            self.server_script_path = "src/mcp_servers/file-system-mcp-server/file-system-mcp-server/fs_server.py"
             self.session: Optional[ClientSession] = None
             self.exit_stack = AsyncExitStack()
             
@@ -61,8 +59,6 @@ class GmailMCPClient:
                 command=sys.executable,
                 args=[
                     self.server_script_path,
-                    "--creds-file-path", self.credentials_path,
-                    "--token-path", self.token_path
                 ],
                 env=None
             )
@@ -79,15 +75,15 @@ class GmailMCPClient:
             
             # Initialize session
             await self.session.initialize()
-            print("✅ Gmail MCP server connected successfully")
+            print("✅ FileSystem MCP server connected successfully")
         except Exception as e:
-            print(f"❌ Failed to connect to Gmail MCP server: {e}")
+            print(f"❌ Failed to connect to FileSystem MCP server: {e}")
             self.session = None
             raise
     
     async def _reconnect(self):
         """Reconnect to the MCP server after connection loss"""
-        print("🔄 Attempting to reconnect to Gmail MCP server...")
+        print("🔄 Attempting to reconnect to FileSystem MCP server...")
         try:
             # Close existing connection
             if self.exit_stack:
@@ -102,7 +98,7 @@ class GmailMCPClient:
             
             # Reconnect
             await self._connect()
-            print("✅ Reconnected to Gmail MCP server")
+            print("✅ Reconnected to FileSystem MCP server")
         except Exception as e:
             print(f"❌ Reconnection failed: {e}")
             raise
@@ -142,15 +138,14 @@ class GmailMCPClient:
                             except Exception as reconnect_error:
                                 print(f"❌ Reconnection failed: {reconnect_error}")
                         else:
-                            print(f"❌ Max retries reached. Gmail MCP server may have crashed.")
-                            print(f"💡 Try running: python authenticate_gmail.py to refresh credentials")
-                            raise Exception(f"Gmail MCP connection failed after {max_retries} retries: {error_msg}")
+                            print(f"❌ Max retries reached. FileSystem MCP server may have crashed.")
+                            raise Exception(f"FileSystem MCP connection failed after {max_retries} retries: {error_msg}")
                     else:
                         # Non-connection error, raise immediately
-                        print(f"❌ Gmail MCP tool error: {error_msg}")
+                        print(f"❌ FileSystem MCP tool error: {error_msg}")
                         raise
             
-            raise Exception("Failed to execute Gmail tool after multiple retries")
+            raise Exception("Failed to execute FileSystem tool after multiple retries")
         
     async def _list_tools(self) -> List[McpTool]:
         if self.session is None:
