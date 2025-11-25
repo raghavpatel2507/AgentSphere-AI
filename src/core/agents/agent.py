@@ -5,7 +5,8 @@ from src.core.tools.custom_tools import *
 from src.core.agents.system_prompt import *
 from src.Figma_MCP.figma_tools import *
 
-
+import os
+import json
 import asyncio
 from src.core.tools import load_mcp_tools_sync
 from src.mcp_clients.gmail import GmailMCPClient
@@ -13,6 +14,36 @@ from src.mcp_clients.zoho import ZohoMCPClient
 from src.mcp_clients.github import GithubMCPClient
 from src.mcp_clients.filesystem import FileSystemMCPClient
 from src.mcp_clients.discord import DiscordMCPClient
+
+
+def load_mcp_config():
+    """Load MCP configuration from mcp_config.json"""
+    config_path = "mcp_config.json"
+    
+    # Default configuration (all disabled except filesystem for safety)
+    default_config = {
+        "gmail_mcp": {"enabled": False, "description": "Gmail operations"},
+        "zoho_mcp": {"enabled": False, "description": "Zoho Books operations"},
+        "github_mcp": {"enabled": False, "description": "GitHub operations"},
+        "filesystem_mcp": {"enabled": True, "description": "File system operations"},
+        "discord_mcp": {"enabled": False, "description": "Discord operations"}
+    }
+    
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config
+        else:
+            # Create default config file
+            print(f"⚙️  Creating default MCP configuration: {config_path}")
+            with open(config_path, 'w') as f:
+                json.dump(default_config, f, indent=2)
+            return default_config
+    except Exception as e:
+        print(f"⚠️  Warning: Error loading MCP config: {e}")
+        print(f"⚠️  Using default configuration (only FileSystem enabled)")
+        return default_config
 
 
 
@@ -77,22 +108,81 @@ def init_discord_tools():
 
 
 
-# Load tools synchronously for module-level definition
-try:
-    gmail_tools = init_gmail_tools()
-    zoho_tools = init_zoho_tools()
-    github_tools = init_github_tools()
-    filesystem_tools = init_filesystem_tools()
-    discord_tools = init_discord_tools()
+# Load MCP configuration
+print("\n" + "="*60)
+print("🚀 AgentSphere-AI - Initializing MCP Servers")
+print("="*60)
 
+mcp_config = load_mcp_config()
+
+print("\n📋 MCP Server Status:")
+
+# Load tools synchronously for module-level definition, but only if enabled
+try:
+    # Gmail MCP
+    if mcp_config.get("gmail_mcp", {}).get("enabled", False):
+        print("  ⏳ Gmail MCP - Loading...")
+        gmail_tools = init_gmail_tools()
+        print("  ✅ Gmail MCP - ENABLED")
+    else:
+        gmail_tools = []
+        print("  ⏸️  Gmail MCP - DISABLED")
+    
+    # Zoho MCP
+    if mcp_config.get("zoho_mcp", {}).get("enabled", False):
+        print("  ⏳ Zoho MCP - Loading...")
+        zoho_tools = init_zoho_tools()
+        print("  ✅ Zoho MCP - ENABLED")
+    else:
+        zoho_tools = []
+        print("  ⏸️  Zoho MCP - DISABLED")
+    
+    # GitHub MCP
+    if mcp_config.get("github_mcp", {}).get("enabled", False):
+        print("  ⏳ GitHub MCP - Loading...")
+        github_tools = init_github_tools()
+        print("  ✅ GitHub MCP - ENABLED")
+    else:
+        github_tools = []
+        print("  ⏸️  GitHub MCP - DISABLED")
+    
+    # FileSystem MCP
+    if mcp_config.get("filesystem_mcp", {}).get("enabled", False):
+        print("  ⏳ FileSystem MCP - Loading...")
+        filesystem_tools = init_filesystem_tools()
+        print("  ✅ FileSystem MCP - ENABLED")
+    else:
+        filesystem_tools = []
+        print("  ⏸️  FileSystem MCP - DISABLED")
+    
+    # Discord MCP
+    if mcp_config.get("discord_mcp", {}).get("enabled", False):
+        print("  ⏳ Discord MCP - Loading...")
+        discord_tools = init_discord_tools()
+        print("  ✅ Discord MCP - ENABLED")
+    else:
+        discord_tools = []
+        print("  ⏸️  Discord MCP - DISABLED")
     
 except Exception as e:
-    print(f"Warning: Error initializing MCP tools: {e}")
+    print(f"\n⚠️  Warning: Error initializing MCP tools: {e}")
     gmail_tools = []
     zoho_tools = []
     github_tools = []
     filesystem_tools = []
     discord_tools = []
+
+# Track which MCP agents are enabled
+enabled_mcp_agents = {
+    "gmail": mcp_config.get("gmail_mcp", {}).get("enabled", False),
+    "zoho": mcp_config.get("zoho_mcp", {}).get("enabled", False),
+    "github": mcp_config.get("github_mcp", {}).get("enabled", False),
+    "filesystem": mcp_config.get("filesystem_mcp", {}).get("enabled", False),
+    "discord": mcp_config.get("discord_mcp", {}).get("enabled", False)
+}
+
+print("\n💡 To configure MCP servers, edit: mcp_config.json")
+print("="*60 + "\n")
     
 
 
