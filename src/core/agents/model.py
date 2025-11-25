@@ -25,18 +25,17 @@ MAX_TOKENS = int(os.getenv("MAX_TOKENS", "100000"))  # Token limit for trimming
 #     max_retries=3,  # Auto-retry on API errors
 # )
 
-model = ChatGroq(
-    api_key=GROQ_API_KEY,
-    # model="llama-3.3-70b-versatile",
-    model="openai/gpt-oss-120b",
-    temperature=0.7,
-    max_retries=3,
-)
-
-# Gemini - Excellent tool support, huge context window (1M), FREE tier
-# model = ChatGoogleGenerativeAI(
-#     google_api_key=GOOGLE_API_KEY,
-#     model="gemini-2.5-flash",
+# model = ChatGroq(
+#     api_key=GROQ_API_KEY,
+#     # model="llama-3.3-70b-versatile",
+#     model="openai/gpt-oss-120b",
 #     temperature=0.7,
 #     max_retries=3,
 # )
+
+model = ChatGoogleGenerativeAI(
+    google_api_key=GOOGLE_API_KEY,
+    model="gemini-2.5-flash",
+    temperature=0.7,
+    max_retries=3,
+)
