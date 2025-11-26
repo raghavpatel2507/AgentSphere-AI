@@ -192,3 +192,11 @@ logs/
 *.db
 *.sqlite
 *.sqlite3
+
+# YouTube MCP Authentication (DO NOT COMMIT!)
+src/configs/youtube_credential.json
+src/configs/youtube_token.pickle
+src/mcp_servers/youtube-mcp-server/credentials.json
+src/mcp_servers/youtube-mcp-server/token.pickle
+
+

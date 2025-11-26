@@ -49,6 +49,8 @@ def get_active_agents():
         agents.append(filesystem_agent)
     if enabled_mcp_agents.get("discord", False):
         agents.append(discord_agent)
+    if enabled_mcp_agents.get("youtube", False):
+        agents.append(youtube_agent)
     
     return agents
 
@@ -78,6 +80,20 @@ def get_dynamic_supervisor_prompt():
         base_prompt += "   - filesystem_agent: File system operations (read, write, list, move, delete files/directories)\n"
     if enabled_mcp_agents.get("discord", False):
         base_prompt += "   - discord_expert: Discord operations (servers, channels, messages)\n"
+    if enabled_mcp_agents.get("youtube", False):
+        base_prompt += "   - youtube_expert: YouTube operations (search videos, get info, comments, summarization, flashcards, quizzes)\n"
+    
+    # Add routing guidance
+    base_prompt += (
+        "\n\n"
+        "   ROUTING GUIDELINES:\n"
+        "   - YouTube queries (search videos, get video info, YouTube URLs, video summaries, flashcards, quizzes) → youtube_expert\n"
+        "   - General web searches (not YouTube-specific) → websearch_agent\n"
+        "   - Email operations → gmail_expert\n"
+        "   - File operations → filesystem_agent\n"
+        "   - Code execution → python_agent\n"
+        "   - Math calculations → math_agent\n"
+    )
     
     # Add the rest of the system prompt (workflow principles, etc.)
     base_prompt += system_prompt_supervisor.split("AVAILABLE AGENTS:")[1].split("   CORE PRINCIPLE")[1] if "CORE PRINCIPLE" in system_prompt_supervisor else ""
@@ -157,6 +173,8 @@ def get_app(checkpointer=None):
             interrupt_list.append("filesystem_expert")
         if enabled_mcp_agents.get("discord", False):
             interrupt_list.append("discord_expert")
+        if enabled_mcp_agents.get("youtube", False):
+            interrupt_list.append("youtube_expert")
         
         # Compile with checkpointer and interrupt before agent execution
         return workflow.compile(

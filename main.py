@@ -311,7 +311,23 @@ async def main():
             if result.get("messages"):
                 last_message = result["messages"][-1]
                 if hasattr(last_message, "content"):
-                    print(f"\n{last_message.content}\n")
+                    content = last_message.content
+                    
+                    # Handle structured content (list of dicts with text/extras)
+                    if isinstance(content, list):
+                        # Extract text from each item
+                        text_parts = []
+                        for item in content:
+                            if isinstance(item, dict) and "text" in item:
+                                text_parts.append(item["text"])
+                            elif isinstance(item, str):
+                                text_parts.append(item)
+                            else:
+                                text_parts.append(str(item))
+                        print(f"\n{' '.join(text_parts)}\n")
+                    else:
+                        # Simple string content
+                        print(f"\n{content}\n")
                 else:
                     print(f"\n{last_message}\n")
             

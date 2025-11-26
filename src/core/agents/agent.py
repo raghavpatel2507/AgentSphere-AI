@@ -14,6 +14,7 @@ from src.mcp_clients.zoho import ZohoMCPClient
 from src.mcp_clients.github import GithubMCPClient
 from src.mcp_clients.filesystem import FileSystemMCPClient
 from src.mcp_clients.discord import DiscordMCPClient
+from src.mcp_clients.youtube import YouTubeMCPClient
 
 
 def load_mcp_config():
@@ -26,7 +27,8 @@ def load_mcp_config():
         "zoho_mcp": {"enabled": False, "description": "Zoho Books operations"},
         "github_mcp": {"enabled": False, "description": "GitHub operations"},
         "filesystem_mcp": {"enabled": True, "description": "File system operations"},
-        "discord_mcp": {"enabled": False, "description": "Discord operations"}
+        "discord_mcp": {"enabled": False, "description": "Discord operations"},
+        "youtube_mcp": {"enabled": False, "description": "YouTube operations"}
     }
     
     try:
@@ -105,6 +107,17 @@ def init_discord_tools():
         discord_tools = []
     return discord_tools
 
+def init_youtube_tools():
+    """Initialize and load YouTube MCP tools"""
+    youtube_client = YouTubeMCPClient()
+    youtube_client.connect_sync()
+    try:
+        youtube_tools = load_mcp_tools_sync(youtube_client)
+    except Exception as e:
+        print(f"Error loading YouTube MCP tools: {e}")
+        youtube_tools = []
+    return youtube_tools
+
 
 
 
@@ -164,6 +177,15 @@ try:
         discord_tools = []
         print("  ⏸️  Discord MCP - DISABLED")
     
+    # YouTube MCP
+    if mcp_config.get("youtube_mcp", {}).get("enabled", False):
+        print("  ⏳ YouTube MCP - Loading...")
+        youtube_tools = init_youtube_tools()
+        print("  ✅ YouTube MCP - ENABLED")
+    else:
+        youtube_tools = []
+        print("  ⏸️  YouTube MCP - DISABLED")
+    
 except Exception as e:
     print(f"\n⚠️  Warning: Error initializing MCP tools: {e}")
     gmail_tools = []
@@ -171,6 +193,7 @@ except Exception as e:
     github_tools = []
     filesystem_tools = []
     discord_tools = []
+    youtube_tools = []
 
 # Track which MCP agents are enabled
 enabled_mcp_agents = {
@@ -178,7 +201,8 @@ enabled_mcp_agents = {
     "zoho": mcp_config.get("zoho_mcp", {}).get("enabled", False),
     "github": mcp_config.get("github_mcp", {}).get("enabled", False),
     "filesystem": mcp_config.get("filesystem_mcp", {}).get("enabled", False),
-    "discord": mcp_config.get("discord_mcp", {}).get("enabled", False)
+    "discord": mcp_config.get("discord_mcp", {}).get("enabled", False),
+    "youtube": mcp_config.get("youtube_mcp", {}).get("enabled", False)
 }
 
 print("\n💡 To configure MCP servers, edit: mcp_config.json")
@@ -259,5 +283,13 @@ discord_agent = create_agent(
     tools=discord_tools, # Dynamically loaded tools
     name="discord_expert",
     system_prompt=system_prompt_discord_mcp
+)
+
+#------------------------------This agent used for YouTube MCP operations------------------------------#
+youtube_agent = create_agent(
+    model=model,
+    tools=youtube_tools, # Dynamically loaded tools
+    name="youtube_expert",
+    system_prompt=system_prompt_youtube_mcp
 )
 

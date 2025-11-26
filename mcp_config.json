@@ -4,7 +4,7 @@
     "description": "Gmail operations (send, read, search emails)"
   },
   "zoho_mcp": {
-    "enabled": true,
+    "enabled": false,
     "description": "Zoho Books operations (invoices, contacts, expenses)"
   },
   "github_mcp": {
@@ -18,5 +18,9 @@
   "discord_mcp": {
     "enabled": false,
     "description": "Discord operations (servers, channels, messages)"
+  },
+  "youtube_mcp": {
+    "enabled": true,
+    "description": "YouTube operations (search, video info, comments, summarization)"
   }
 }
