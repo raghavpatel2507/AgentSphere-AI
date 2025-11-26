@@ -3,7 +3,7 @@ from langchain_core.messages import trim_messages
 from src.core.agents.model import model, MAX_TOKENS
 from src.core.agents.system_prompt import system_prompt_supervisor
 from src.core.agents.agent import *
-
+from src.core.mcp.manager import MCPManager
 
 # Message trimming function for sliding window
 def trim_state_messages(state):
@@ -38,19 +38,9 @@ def get_active_agents():
     """Build list of active agents based on MCP configuration"""
     agents = [websearch_agent, math_agent, python_agent]  # Always available
     
-    # Add MCP agents only if enabled
-    if enabled_mcp_agents.get("github", False):
-        agents.append(github_agent)
-    if enabled_mcp_agents.get("gmail", False):
-        agents.append(gmail_agent)
-    if enabled_mcp_agents.get("zoho", False):
-        agents.append(zoho_agent)
-    if enabled_mcp_agents.get("filesystem", False):
-        agents.append(filesystem_agent)
-    if enabled_mcp_agents.get("discord", False):
-        agents.append(discord_agent)
-    if enabled_mcp_agents.get("youtube", False):
-        agents.append(youtube_agent)
+    # Add dynamic experts
+    if dynamic_experts:
+        agents.extend(dynamic_experts.values())
     
     return agents
 
@@ -69,36 +59,33 @@ def get_dynamic_supervisor_prompt():
         "   - python_agent: Python code execution, data processing\n"
     )
     
-    # Add MCP agents only if enabled
-    if enabled_mcp_agents.get("github", False):
-        base_prompt += "   - github_expert: GitHub operations (repos, files, commits, branches)\n"
-    if enabled_mcp_agents.get("gmail", False):
-        base_prompt += "   - gmail_expert: Email operations (send, read, search, drafts, labels)\n"
-    if enabled_mcp_agents.get("zoho", False):
-        base_prompt += "   - zoho_expert: Zoho Books (invoices, expenses, contacts, items)\n"
-    if enabled_mcp_agents.get("filesystem", False):
-        base_prompt += "   - filesystem_agent: File system operations (read, write, list, move, delete files/directories)\n"
-    if enabled_mcp_agents.get("discord", False):
-        base_prompt += "   - discord_expert: Discord operations (servers, channels, messages)\n"
-    if enabled_mcp_agents.get("youtube", False):
-        base_prompt += "   - youtube_expert: YouTube operations (search videos, get info, comments, summarization, flashcards, quizzes)\n"
+    # Add dynamic experts to prompt
+    manager = MCPManager()
+    config = manager.load_config()
+    
+    for server in config.get("mcp_servers", []):
+        if server.get("enabled", False):
+            name = server.get("name")
+            role = server.get("expert_role", f"{name} specialist")
+            base_prompt += f"   - {name}_expert: {role}\n"
     
     # Add routing guidance
     base_prompt += (
         "\n\n"
         "   ROUTING GUIDELINES:\n"
-        "   - YouTube queries (search videos, get video info, YouTube URLs, video summaries, flashcards, quizzes) → youtube_expert\n"
         "   - General web searches (not YouTube-specific) → websearch_agent\n"
-        "   - Email operations → gmail_expert\n"
-        "   - File operations → filesystem_agent\n"
         "   - Code execution → python_agent\n"
         "   - Math calculations → math_agent\n"
     )
     
-    # Add the rest of the system prompt (workflow principles, etc.)
-    base_prompt += system_prompt_supervisor.split("AVAILABLE AGENTS:")[1].split("   CORE PRINCIPLE")[1] if "CORE PRINCIPLE" in system_prompt_supervisor else ""
+    # Add dynamic routing guidelines
+    for server in config.get("mcp_servers", []):
+        if server.get("enabled", False):
+            name = server.get("name")
+            base_prompt += f"   - {name} related tasks → {name}_expert\n"
     
     # Add core principles from original prompt
+    # We'll just append the standard principles
     base_prompt += (
         "\n\n"
         "   CORE PRINCIPLE - WORKFLOW CHAINING:\n"
@@ -137,15 +124,17 @@ def get_dynamic_supervisor_prompt():
 
 
 # Create supervisor workflow with dynamic agents and prompt
-active_agents = get_active_agents()
-dynamic_prompt = get_dynamic_supervisor_prompt()
-
-workflow = create_supervisor(
-    agents=active_agents,
-    model=model,
-    prompt=dynamic_prompt,
-    state_modifier=trim_state_messages  # Automatic sliding window
-)
+# Note: This will be called by main.py after initializing dynamic experts
+def create_workflow():
+    active_agents = get_active_agents()
+    dynamic_prompt = get_dynamic_supervisor_prompt()
+    
+    return create_supervisor(
+        agents=active_agents,
+        model=model,
+        prompt=dynamic_prompt,
+        state_modifier=trim_state_messages  # Automatic sliding window
+    )
 
 
 def get_app(checkpointer=None):
@@ -159,22 +148,15 @@ def get_app(checkpointer=None):
     Returns:
         Compiled LangGraph application
     """
+    workflow = create_workflow()
+    
     if checkpointer is not None:
         # Build dynamic interrupt list based on enabled agents
         interrupt_list = ["websearch_expert", "math_expert", "python_expert"]
         
-        if enabled_mcp_agents.get("github", False):
-            interrupt_list.append("github_expert")
-        if enabled_mcp_agents.get("gmail", False):
-            interrupt_list.append("gmail_expert")
-        if enabled_mcp_agents.get("zoho", False):
-            interrupt_list.append("zoho_expert")
-        if enabled_mcp_agents.get("filesystem", False):
-            interrupt_list.append("filesystem_expert")
-        if enabled_mcp_agents.get("discord", False):
-            interrupt_list.append("discord_expert")
-        if enabled_mcp_agents.get("youtube", False):
-            interrupt_list.append("youtube_expert")
+        # Add dynamic experts to interrupt list
+        if dynamic_experts:
+            interrupt_list.extend(dynamic_experts.keys())
         
         # Compile with checkpointer and interrupt before agent execution
         return workflow.compile(
@@ -184,7 +166,3 @@ def get_app(checkpointer=None):
     else:
         # Compile without checkpointer (stateless)
         return workflow.compile()
-
-
-# Default app without checkpointer (for backward compatibility)
-app = workflow.compile()

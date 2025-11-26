@@ -1,0 +1,135 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "mcp_servers": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Unique name for the MCP server"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "node",
+                            "python",
+                            "docker",
+                            "remote"
+                        ],
+                        "description": "Type of MCP server"
+                    },
+                    "command": {
+                        "type": "string",
+                        "description": "Command to execute (for node/python/docker types)"
+                    },
+                    "args": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Arguments for the command"
+                    },
+                    "cwd": {
+                        "type": "string",
+                        "description": "Working directory for the process"
+                    },
+                    "env": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        },
+                        "description": "Environment variables for the process"
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "URL for remote MCP server"
+                    },
+                    "auth": {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "enum": [
+                                    "bearer",
+                                    "apikey"
+                                ]
+                            },
+                            "token": {
+                                "type": "string"
+                            },
+                            "key": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "default": true
+                    },
+                    "expert_role": {
+                        "type": "string",
+                        "description": "Description of the expert role for dynamic agent generation"
+                    },
+                    "custom_prompt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Custom system prompt for the expert agent"
+                    }
+                },
+                "required": [
+                    "name",
+                    "type",
+                    "enabled"
+                ]
+            }
+        },
+        "dynamic_experts": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "auto_create_from_tools": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "expert_template": {
+                    "type": "string",
+                    "description": "Template for generating expert system prompts"
+                }
+            }
+        },
+        "llm": {
+            "type": "object",
+            "properties": {
+                "provider": {
+                    "type": "string",
+                    "enum": [
+                        "openai",
+                        "gemini",
+                        "claude",
+                        "groq"
+                    ]
+                },
+                "model": {
+                    "type": "string"
+                },
+                "temperature": {
+                    "type": "number"
+                },
+                "max_tokens": {
+                    "type": "integer"
+                }
+            }
+        }
+    },
+    "required": [
+        "mcp_servers"
+    ]
+}

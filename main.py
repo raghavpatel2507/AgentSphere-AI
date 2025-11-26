@@ -67,7 +67,15 @@ async def main():
     await init_checkpointer()
     checkpointer = get_checkpointer()
     
+    # Initialize dynamic agents
+    print("🔄 Initializing Dynamic Agents...")
+    from src.core.agents.agent import get_dynamic_agents, dynamic_experts
+    experts = await get_dynamic_agents()
+    dynamic_experts.update(experts)
+    print(f"✅ Initialized {len(experts)} dynamic experts")
+    
     # Get supervisor app with checkpointer
+    # Note: get_app calls create_workflow which uses the now-populated dynamic_experts
     app = get_app(checkpointer=checkpointer)
     
     # Setup tenant and get/create session
