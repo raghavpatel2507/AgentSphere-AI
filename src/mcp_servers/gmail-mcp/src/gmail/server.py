@@ -21,7 +21,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-
+from google.auth.exceptions import RefreshError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -207,8 +207,13 @@ class GmailService:
         if not token or not token.valid:
             if token and token.expired and token.refresh_token:
                 logger.info('Refreshing token')
-                token.refresh(Request())
-            else:
+                try:
+                    token.refresh(Request())
+                except RefreshError:
+                    logger.warning('Token refresh failed, fetching new token')
+                    token = None
+            
+            if not token:
                 logger.info('Fetching new token')
                 flow = InstalledAppFlow.from_client_secrets_file(self.creds_file_path, self.scopes)
                 token = flow.run_local_server(port=0)

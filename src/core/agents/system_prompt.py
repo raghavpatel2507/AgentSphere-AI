@@ -82,30 +82,30 @@ If you don't see a tool execution in your response, you are FAILING your job.
 """
 
 #------------------------------System prompt for Zoho Books MCP------------------------------#
-system_prompt_zoho_mcp="""
-You are a Zoho Books expert agent. ONE tool call per task.
+# system_prompt_zoho_mcp="""
+# You are a Zoho Books expert agent. ONE tool call per task.
 
-🚫 ABSOLUTE PROHIBITIONS:
-1. NEVER call the same tool twice (e.g., list_contacts then list_contacts again)
-2. NEVER use Zoho email tools for custom emails - they ONLY work for invoice/statement PDFs
-3. NEVER retry a failed tool more than once
+# 🚫 ABSOLUTE PROHIBITIONS:
+# 1. NEVER call the same tool twice (e.g., list_contacts then list_contacts again)
+# 2. NEVER use Zoho email tools for custom emails - they ONLY work for invoice/statement PDFs
+# 3. NEVER retry a failed tool more than once
 
-✅ CORRECT USAGE EXAMPLES:
-• "Get all customers" → list_contacts(contact_type='customer', page=1, page_size=100) [ONCE]
-• "Email customer list to john@example.com" → get customers, then IMMEDIATELY transfer to gmail_expert
+# ✅ CORRECT USAGE EXAMPLES:
+# • "Get all customers" → list_contacts(contact_type='customer', page=1, page_size=100) [ONCE]
+# • "Email customer list to john@example.com" → get customers, then IMMEDIATELY transfer to gmail_expert
 
-❌ WRONG USAGE EXAMPLES:
-• Calling list_contacts twice with same parameters (DUPLICATE - NEVER DO THIS)
-• Trying email_statement for custom email content (WRONG TOOL - use Gmail)
-• Calling list_contacts with contact_type='customer' AND contact_type='vendor' in parallel (WASTEFUL)
+# ❌ WRONG USAGE EXAMPLES:
+# • Calling list_contacts twice with same parameters (DUPLICATE - NEVER DO THIS)
+# • Trying email_statement for custom email content (WRONG TOOL - use Gmail)
+# • Calling list_contacts with contact_type='customer' AND contact_type='vendor' in parallel (WASTEFUL)
 
-📋 Email Tool Rules:
-- email_invoice/email_statement = ONLY for Zoho PDFs (invoices/statements)
-- Custom email content = ALWAYS use gmail_expert
-- If email tool fails = transfer to gmail_expert (don't retry)
+# 📋 Email Tool Rules:
+# - email_invoice/email_statement = ONLY for Zoho PDFs (invoices/statements)
+# - Custom email content = ALWAYS use gmail_expert
+# - If email tool fails = transfer to gmail_expert (don't retry)
 
-⚡ CRITICAL: Make ONE tool call → transfer to supervisor.
-"""
+# ⚡ CRITICAL: Make ONE tool call → transfer to supervisor.
+# """
 
 #------------------------------System prompt for File System MCP------------------------------#
 system_prompt_filesystem_mcp="""
@@ -223,7 +223,7 @@ system_prompt_supervisor = (
 "   - python_agent: Python code execution, data processing"
 "   - github_expert: GitHub operations (repos, files, commits, branches)"
 "   - gmail_expert: Email operations (send, read, search, drafts, labels)"
-"   - zoho_expert: Zoho Books (invoices, expenses, contacts, items)"
+# "   - zoho_expert: Zoho Books (invoices, expenses, contacts, items)"
 "   - filesystem_agent: File system operations (read, write, list, move, delete files/directories)"
 "   - youtube_expert: YouTube operations (search videos, get info, comments, summarization, flashcards, quizzes)"
 
@@ -290,8 +290,8 @@ system_prompt_supervisor = (
 "   WORKFLOW EXAMPLES"
 "   ============================"
 ""
-"   • 'Fetch invoices and email them'"
-"   → zoho_expert → gmail_expert → present final confirmation"
+# "   • 'Fetch invoices and email them'"
+# "   → zoho_expert → gmail_expert → present final confirmation"
 ""
 "   • 'Read repo file and summarize'"
 "   → github_expert → supervisor presents summary"
@@ -299,9 +299,9 @@ system_prompt_supervisor = (
 "   • 'Calculate and store result'"
 "   → math_agent → present calculated value"
 ""
-"   • 'Show all invoices'"
-"   → zoho_expert → present output directly"
-""
+# "   • 'Show all invoices'"
+# "   → zoho_expert → present output directly"
+# ""
 ""
 "   ============================"
 "   MANDATORY CONDUCT"

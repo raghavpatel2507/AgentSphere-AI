@@ -8,7 +8,7 @@
         "mcp_videos.py"
       ],
       "cwd": "src/mcp_servers/youtube-mcp-server",
-      "enabled": true,
+      "enabled": false,
       "expert_role": "YouTube specialist for video search, details, comments, and summarization",
       "custom_prompt": null
     },
@@ -20,7 +20,7 @@
         "src/mcp_servers/file-system-mcp-server/file-system-mcp-server/fs_server.py"
       ],
       "cwd": ".",
-      "enabled": true,
+      "enabled": false,
       "expert_role": "File system manager for reading, writing, and organizing files"
     },
     {
@@ -35,7 +35,7 @@
         "../../../../configs/gmail_token.json"
       ],
       "cwd": "src/mcp_servers/gmail-mcp/src/gmail",
-      "enabled": true,
+      "enabled":true,
       "expert_role": "Email specialist for Gmail operations"
     },
     {
@@ -47,7 +47,7 @@
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}",
         "GITHUB_USERNAME": "${GITHUB_USERNAME}"
       },
-      "enabled": true,
+      "enabled": false,
       "expert_role": "GitHub specialist for repositories, issues, and pull requests",
       "custom_prompt": "You are a GitHub specialist. CRITICAL: You ONLY work with repositories owned by 'raghavpatel2507'. NEVER access or search repositories from other users. When listing or searching repositories, ALWAYS use owner='raghavpatel2507'. When reading files, ALWAYS use owner='raghavpatel2507'. If a user asks about a repository without specifying the owner, assume it belongs to 'raghavpatel2507'."
     },
@@ -56,34 +56,30 @@
       "type": "python",
       "command": "python3",
       "args": [
-        "src/mcp_servers/discord/server.py"
+        "main.py"
       ],
+      "cwd": "src/mcp_servers/discord-mcp",
       "env": {
         "DISCORD_EMAIL": "${DISCORD_EMAIL}",
         "DISCORD_PASSWORD": "${DISCORD_PASSWORD}",
-        "DISCORD_HEADLESS": true
+        "DISCORD_HEADLESS": "true"
       },
       "enabled": false,
       "expert_role": "Discord communication specialist for managing channels and messages"
     },
     {
-      "name": "zoho",
-      "type": "python",
-      "command": "python3",
+      "name": "google-drive",
+      "type": "node",
+      "command": "node",
       "args": [
-        "-m",
-        "zoho_mcp.server",
-        "--stdio"
+        "dist/index.js"
       ],
-      "cwd": "src/mcp_servers/zoho-mcp",
+      "cwd": "src/mcp_servers/google-drive-mcp",
       "env": {
-        "ZOHO_CLIENT_ID": "${ZOHO_CLIENT_ID}",
-        "ZOHO_CLIENT_SECRET": "${ZOHO_CLIENT_SECRET}",
-        "ZOHO_REFRESH_TOKEN": "${ZOHO_REFRESH_TOKEN}",
-        "ZOHO_ORGANIZATION_ID": "${ZOHO_ORGANIZATION_ID}"
+        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "/home/logicrays/Desktop/AgentSphere-AI/src/configs/gmail_credential.json"
       },
-      "enabled": false,
-      "expert_role": "Zoho Books specialist for invoices and expenses"
+      "enabled": true,
+      "expert_role": "Google Drive specialist for managing files, docs, sheets, and slides"
     }
   ],
   "dynamic_experts": {

@@ -532,7 +532,7 @@ def search_file_contents(directory_path, query, recursive=True, file_types=None,
 
 # MCP Tool: Scan Directory
 @mcp.tool()
-def scan_directory_tool(directory_path: str, recursive: bool = True, file_types: Optional[list] = None) -> Dict[str, Any]:
+def scan_directory_tool(directory_path: str, recursive: bool = True, file_types: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     Scan a directory for files.
     
@@ -649,7 +649,7 @@ def list_drives() -> Dict[str, Any]:
 
 # MCP Tool: Create Collection
 @mcp.tool()
-def create_collection(name: str, file_paths: list, storage_path: str = None) -> Dict[str, Any]:
+def create_collection(name: str, file_paths: List[str], storage_path: str = None) -> Dict[str, Any]:
     """
     Create a collection of files.
     
@@ -823,7 +823,7 @@ def write_text_file_tool(file_path: str, content: str, append: bool = False) -> 
 
 # MCP Tool: Search Files
 @mcp.tool()
-def search_files_tool(directory_path: str, query: str, recursive: bool = True, file_types: Optional[list] = None) -> Dict[str, Any]:
+def search_files_tool(directory_path: str, query: str, recursive: bool = True, file_types: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     Search for files matching a query in a directory.
     
@@ -872,7 +872,7 @@ def search_files_tool(directory_path: str, query: str, recursive: bool = True, f
 
 # MCP Tool: Search File Contents
 @mcp.tool()
-def search_file_contents_tool(directory_path: str, query: str, recursive: bool = True, file_types: Optional[list] = None, max_results: int = 100) -> Dict[str, Any]:
+def search_file_contents_tool(directory_path: str, query: str, recursive: bool = True, file_types: Optional[List[str]] = None, max_results: int = 100) -> Dict[str, Any]:
     """
     Search for files containing a query in their contents.
     
