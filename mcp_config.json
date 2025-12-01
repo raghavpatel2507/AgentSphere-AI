@@ -2,15 +2,17 @@
   "mcp_servers": [
     {
       "name": "youtube",
-      "type": "python",
-      "command": "python",
+      "type": "node",
+      "command": "npx",
       "args": [
-        "mcp_videos.py"
+        "-y",
+        "youtube-data-mcp-server"
       ],
-      "cwd": "src/mcp_servers/youtube-mcp-server",
+      "env": {
+        "YOUTUBE_API_KEY": "${YOUTUBE_API_KEY}"
+      },
       "enabled": true,
-      "expert_role": "YouTube specialist for video search, details, comments, and summarization",
-      "custom_prompt": null
+      "expert_role": "YouTube specialist for video search, details, comments, and summarization"
     },
     {
       "name": "filesystem",
@@ -25,18 +27,19 @@
     },
     {
       "name": "gmail",
-      "type": "python",
-      "command": "python",
+      "type": "node",
+      "command": "npx",
       "args": [
-        "server.py",
-        "--creds-file-path",
-        "../../../../configs/gmail_credential.json",
-        "--token-path",
-        "../../../../configs/gmail_token.json"
+        "-y",
+        "@gongrzhe/server-gmail-autoauth-mcp",
+        "--credentials",
+        "src/configs/gmail_credential.json",
+        "--token",
+        "src/configs/gmail_token.json"
       ],
-      "cwd": "src/mcp_servers/gmail-mcp/src/gmail",
       "enabled": true,
-      "expert_role": "Email specialist for Gmail operations"
+      "expert_role": "Email specialist for Gmail operations",
+      "custom_prompt": "You are a Gmail specialist with access to the user's Gmail account.\n\nCRITICAL RULES:\n1. ALWAYS use the provided Gmail tools for email operations\n2. Respect user privacy and data sensitivity\n3. Format email content clearly when presenting to users\n4. Handle authentication errors gracefully\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
     },
     {
       "name": "github",
@@ -70,7 +73,7 @@
         "DISCORD_PASSWORD": "${DISCORD_PASSWORD}",
         "DISCORD_HEADLESS": "true"
       },
-      "enabled": false,
+      "enabled": true,
       "expert_role": "Discord communication specialist for managing channels and messages"
     },
     {
@@ -107,17 +110,42 @@
     {
       "name": "google-drive",
       "type": "node",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "dist/index.js"
+        "@piotr-agier/google-drive-mcp"
       ],
-      "cwd": "src/mcp_servers/google-drive-mcp",
       "env": {
-        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "../../../../configs/gmail_credential.json",
-        "GOOGLE_DRIVE_MCP_TOKEN_PATH": "../../../../configs/google_drive_token.json"
+        "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "${GOOGLE_DRIVE_OAUTH_CREDENTIALS}"
       },
-      "enabled": false,
+      "enabled": true,
       "expert_role": "Google Drive specialist for managing files, docs, sheets, and slides"
+    },
+    {
+      "name": "powerpoint",
+      "type": "python",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "office-powerpoint-mcp-server",
+        "ppt_mcp_server"
+      ],
+      "cwd": ".",
+      "enabled": true,
+      "expert_role": "PowerPoint specialist for creating, editing, and manipulating presentations with professional design",
+      "custom_prompt": "You are a PowerPoint specialist. CRITICAL WORKFLOW: Before using ANY presentation manipulation tools (like auto_generate_presentation, add_slide, add_text, etc.), you MUST first call create_presentation to initialize a new presentation. The create_presentation tool returns a presentation_id that other tools will use. WORKFLOW: 1) create_presentation (ALWAYS FIRST), 2) Use other tools to manipulate the presentation, 3) save_presentation when done. If a tool fails with 'No presentation is currently loaded', it means you forgot step 1."
+    },
+    {
+      "name": "mobile",
+      "type": "node",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mobilenext/mobile-mcp"
+      ],
+      "cwd": ".",
+      "enabled": true,
+      "expert_role": "Mobile automation specialist for Android and iOS device control, app management, and screen interaction",
+      "custom_prompt": "You are a mobile automation specialist. You can control Android and iOS devices, manage apps, interact with screens, and automate mobile tasks. IMPORTANT: Before performing any mobile action, first use mobile_list_available_devices to check connected devices. NOTE: When calling mobile_list_available_devices, you MUST provide the argument 'noParams': {}. Always verify device availability before attempting operations."
     }
   ],
   "dynamic_experts": {

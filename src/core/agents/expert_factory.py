@@ -18,8 +18,13 @@ class ExpertFactory:
         tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in tools])
 
         if custom_template:
-            return custom_template.format(expert_role=role, tools=tool_descriptions)
-
+            try:
+                return custom_template.format(expert_role=role, tools=tool_descriptions)
+            except (IndexError, KeyError, ValueError):
+                # Fallback if template has issues (e.g. unescaped braces or missing keys)
+                # We return the raw template to avoid crashing, though tools might be missing.
+                return custom_template
+            
         return f"""
     You are a HIGH-PRECISION {role} AGENT.
 

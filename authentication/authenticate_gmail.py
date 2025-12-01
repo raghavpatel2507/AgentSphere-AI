@@ -4,18 +4,20 @@ import sys
 import webbrowser
 import time
 import threading
+import requests
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
-from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
+# ---------------------------------------------------------
 # Configuration
+# ---------------------------------------------------------
 CREDENTIALS_FILE = "src/configs/gmail_credential.json"
 TOKEN_FILE = "src/configs/gmail_token.json"
 REDIRECT_PORT = 8098
 REDIRECT_URI = f"http://localhost:{REDIRECT_PORT}/callback"
+
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
 auth_code = None
@@ -45,8 +47,8 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"Authentication failed")
 
-    def log_message(self, format, *args):
-        pass
+    def log_message(self, *args):
+        return
 
 
 def start_server():
@@ -56,77 +58,109 @@ def start_server():
 
 
 # ---------------------------------------------------------
-# Utility Functions
+# Utilities
 # ---------------------------------------------------------
-def get_credentials():
+def load_client_credentials():
     if not os.path.exists(CREDENTIALS_FILE):
-        print(f"❌ Missing {CREDENTIALS_FILE}")
-        print("\nPlease create a Gmail OAuth credential file:")
-        print("1. Go to https://console.cloud.google.com/")
-        print("2. Create a new project or select an existing one")
-        print("3. Enable Gmail API")
-        print("4. Create OAuth 2.0 credentials (Desktop app)")
-        print(f"5. Download and save as {CREDENTIALS_FILE}")
+        print("❌ Missing OAuth credentials file.")
         sys.exit(1)
+
     with open(CREDENTIALS_FILE, "r") as f:
         return json.load(f)
 
 
-def save_token(credentials):
-    """Save the credentials to token file"""
-    token_data = {
-        'token': credentials.token,
-        'refresh_token': credentials.refresh_token,
-        'token_uri': credentials.token_uri,
-        'client_id': credentials.client_id,
-        'client_secret': credentials.client_secret,
-        'scopes': credentials.scopes
-    }
+def save_token_data(token):
     with open(TOKEN_FILE, "w") as f:
-        json.dump(token_data, f, indent=2)
+        json.dump(token, f, indent=2)
+
     print(f"\n✅ Tokens saved to {TOKEN_FILE}")
+    print("\n📌 Granted scopes (from Google):")
+    for s in token["scopes"]:
+        print(f"   • {s}")
 
 
-def get_user_email(credentials):
-    """Fetch the authenticated user's email address"""
+def get_email_from_token(token):
+    creds = Credentials(
+        token=token["access_token"],
+        refresh_token=token.get("refresh_token"),
+        token_uri=token["token_uri"],
+        client_id=token["client_id"],
+        client_secret=token["client_secret"],
+        scopes=token["scopes"]
+    )
+
     try:
-        service = build('gmail', 'v1', credentials=credentials)
-        profile = service.users().getProfile(userId='me').execute()
-        return profile.get('emailAddress', 'Unknown')
-    except Exception as error:
-        print(f"⚠ Could not fetch user email: {error}")
-        return "Unknown"
+        service = build("gmail", "v1", credentials=creds)
+        profile = service.users().getProfile(userId="me").execute()
+        return profile.get("emailAddress", "Unknown")
+    except Exception as e:
+        return f"Error fetching email: {e}"
 
 
 # ---------------------------------------------------------
-# Main OAuth Logic
+# Manual Token Exchange (NO SCOPE VALIDATION)
+# ---------------------------------------------------------
+def exchange_code_for_token(auth_code, client_cfg):
+    token_url = client_cfg["installed"]["token_uri"]
+
+    data = {
+        "code": auth_code,
+        "client_id": client_cfg["installed"]["client_id"],
+        "client_secret": client_cfg["installed"]["client_secret"],
+        "redirect_uri": REDIRECT_URI,
+        "grant_type": "authorization_code"
+    }
+
+    response = requests.post(token_url, data=data)
+    if response.status_code != 200:
+        print("\n❌ Token Exchange Failed")
+        print(response.text)
+        sys.exit(1)
+
+    token_json = response.json()
+
+    # Build normalized token structure
+    return {
+        "access_token": token_json["access_token"],
+        "refresh_token": token_json.get("refresh_token"),
+        "token_uri": token_url,
+        "client_id": client_cfg["installed"]["client_id"],
+        "client_secret": client_cfg["installed"]["client_secret"],
+        "scopes": token_json["scope"].split(" ")
+    }
+
+
+# ---------------------------------------------------------
+# Main Flow
 # ---------------------------------------------------------
 def main():
     print("\n==============================")
     print(" Gmail OAuth Login")
     print("==============================\n")
 
-    creds = get_credentials()
+    client_cfg = load_client_credentials()
 
-    # Launch OAuth Callback Server
+    # Start callback server
     thread = threading.Thread(target=start_server, daemon=True)
     thread.start()
 
-    # Create OAuth flow
-    flow = Flow.from_client_config(
-        creds,
-        scopes=SCOPES,
-        redirect_uri=REDIRECT_URI
+    # Build authorization URL manually
+    params = {
+        "response_type": "code",
+        "client_id": client_cfg["installed"]["client_id"],
+        "redirect_uri": REDIRECT_URI,
+        "scope": " ".join(SCOPES),
+        "access_type": "offline",
+        "prompt": "consent",
+        "include_granted_scopes": "true",
+    }
+    import urllib.parse
+    auth_url = (
+        client_cfg["installed"]["auth_uri"] + "?" +
+        urllib.parse.urlencode(params)
     )
 
-    # Generate authorization URL
-    auth_url, _ = flow.authorization_url(
-        access_type='offline',
-        prompt='consent',
-        include_granted_scopes='true'
-    )
-
-    print("Open URL in browser:\n")
+    print("Open the following link:\n")
     print(auth_url + "\n")
 
     try:
@@ -134,40 +168,26 @@ def main():
     except:
         pass
 
-    print("Waiting for login...")
+    print("Waiting for authentication...")
 
     while auth_code is None:
         time.sleep(1)
 
     print("\n✨ Authorization Code Received!")
 
-    # Exchange code for tokens
-    try:
-        flow.fetch_token(code=auth_code)
-        credentials = flow.credentials
-        
-        # Save tokens
-        save_token(credentials)
+    # 🔥 Manual token exchange (no scope mismatch error)
+    token = exchange_code_for_token(auth_code, client_cfg)
 
-        # Fetch user email
-        print("\nFetching user email...")
-        user_email = get_user_email(credentials)
-        print(f"✅ Authenticated as: {user_email}")
+    save_token_data(token)
 
-    except Exception as e:
-        print(f"\n❌ Failed to exchange code for tokens: {e}")
-        if server_instance:
-            server_instance.shutdown()
-        sys.exit(1)
+    print("\nFetching user email...")
+    email = get_email_from_token(token)
+    print(f"✅ Authenticated as: {email}")
 
-    # Shutdown server
     if server_instance:
         server_instance.shutdown()
 
-    print("\n🎉 Gmail OAuth Setup Complete!")
-    print(f"\nYou can now use the Gmail agent with account: {user_email}")
-    
-    # Exit cleanly
+    print("\n🎉 Gmail OAuth Setup Complete")
     sys.exit(0)
 
 

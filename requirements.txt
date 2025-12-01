@@ -53,18 +53,18 @@ mcp>=1.1.2
 httpx>=0.28.1
 email-validator>=2.3.0
 
-# ============================================
-# GOOGLE API DEPENDENCIES (Gmail MCP)
-# ============================================
-httpx>=0.28.1
-email-validator>=2.3.0
+# # ============================================
+# # GOOGLE API DEPENDENCIES (Gmail MCP)
+# # ============================================
+# httpx>=0.28.1
+# email-validator>=2.3.0
 
-# ============================================
-# GOOGLE API DEPENDENCIES (Gmail MCP)
-# ============================================
-google-api-python-client>=2.156.0
-google-auth-httplib2>=0.2.0
-google-auth-oauthlib>=1.2.1
+# # ============================================
+# # GOOGLE API DEPENDENCIES (Gmail MCP)
+# # ============================================
+# google-api-python-client>=2.156.0
+# google-auth-httplib2>=0.2.0
+# google-auth-oauthlib>=1.2.1
 
 # ============================================
 # POSTGRESQL & DATABASE DEPENDENCIES
@@ -105,12 +105,8 @@ playwright
 
 
 # ============================================
-# YouTube MCP DEPENDENCIES
+# PowerPoint MCP DEPENDENCIES
 # ============================================
-# Note: YouTube MCP uses the same Google API dependencies as Gmail MCP
-# google-api-python-client>=2.156.0 (already included above)
-# google-auth-httplib2>=0.2.0 (already included above)
-# google-auth-oauthlib>=1.2.1 (already included above)
-youtube-search>=2.1.2
-
-
+python-pptx>=0.6.21
+Pillow>=8.0.0
+fonttools>=4.0.0
