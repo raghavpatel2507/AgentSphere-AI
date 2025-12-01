@@ -128,7 +128,66 @@ class MCPManager:
             raise ValueError(f"Server {tool_info.server_name} not found for tool {tool_name}")
             
         # Use original tool name for the actual call (strip prefix if added)
-        return await handler.call_tool(tool_info.original_name, arguments)
+        result = await handler.call_tool(tool_info.original_name, arguments)
+        return self._process_tool_result(result)
+
+    def _process_tool_result(self, result: Any) -> Any:
+        """
+        Process tool result to handle large outputs (e.g. base64 images).
+        If a large base64 string is found, save it to a file and return the path.
+        """
+        import base64
+        import uuid
+        
+        # Threshold for "large" output (e.g. 10KB)
+        LARGE_OUTPUT_THRESHOLD = 10000
+        
+        if isinstance(result, list):
+            # MCP tools often return a list of content objects
+            processed_list = []
+            for item in result:
+                if isinstance(item, dict):
+                    # Check for base64 image content
+                    if item.get("type") == "image" and "data" in item:
+                        data = item["data"]
+                        if len(data) > LARGE_OUTPUT_THRESHOLD:
+                            try:
+                                # Create screenshots directory if it doesn't exist
+                                os.makedirs("screenshots", exist_ok=True)
+                                
+                                # Generate filename
+                                filename = f"screenshot_{uuid.uuid4()}.png"
+                                filepath = os.path.join("screenshots", filename)
+                                
+                                # Decode and save
+                                with open(filepath, "wb") as f:
+                                    f.write(base64.b64decode(data))
+                                    
+                                # Replace data with file path reference
+                                item_copy = item.copy()
+                                item_copy["data"] = f"[Image saved to {os.path.abspath(filepath)}]"
+                                item_copy["saved_to"] = os.path.abspath(filepath)
+                                processed_list.append(item_copy)
+                                continue
+                            except Exception as e:
+                                logger.error(f"Failed to save image: {e}")
+                                # If saving fails, we might still want to truncate it to avoid crashing
+                                item_copy = item.copy()
+                                item_copy["data"] = "[Image data too large and failed to save]"
+                                processed_list.append(item_copy)
+                                continue
+                    
+                    # Check for large text content
+                    elif item.get("type") == "text" and "text" in item:
+                        text = item["text"]
+                        if len(text) > LARGE_OUTPUT_THRESHOLD * 10: # Allow more for text
+                             # We could truncate or save text too, but usually images are the main culprit
+                             pass
+
+                processed_list.append(item)
+            return processed_list
+            
+        return result
         
     def get_all_tools(self):
         """Get all registered tools."""

@@ -114,3 +114,9 @@ playwright
 youtube-search>=2.1.2
 
 
+# ============================================
+# PowerPoint MCP DEPENDENCIES
+# ============================================
+python-pptx>=0.6.21
+Pillow>=8.0.0
+fonttools>=4.0.0
