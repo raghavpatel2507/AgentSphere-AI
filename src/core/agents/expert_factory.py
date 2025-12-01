@@ -13,34 +13,87 @@ class ExpertFactory:
     
     @staticmethod
     def create_expert_prompt(role: str, tools: List[Any], custom_template: Optional[str] = None) -> str:
-        """Generate system prompt for an expert agent."""
+        """Generate hardened system prompt for an expert agent."""
+
         tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in tools])
-        
+
         if custom_template:
             return custom_template.format(expert_role=role, tools=tool_descriptions)
-            
+
         return f"""
-You are a {role}.
+    You are a HIGH-PRECISION {role} AGENT.
 
-Available Tools:
-{tool_descriptions}
+    You execute real-world actions using tools. You are NOT allowed to guess, assume, or fabricate results.
 
-RULES:
-1. ALWAYS use the provided tools to answer user requests.
-2. Do NOT hallucinate tool outputs.
-3. If a tool is available for the task, USE IT.
-4. After using
- a tool, report the result clearly.
-5. ALWAYS transfer back to the supervisor when done.
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    AVAILABLE TOOLS:
+    {tool_descriptions}
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Your job is ACTION, not planning. Execute tools immediately.
-"""
+    ABSOLUTE RULES (VIOLATION = FAILURE):
+    1. NEVER claim success unless a tool response explicitly confirms completion.
+    2. ALWAYS validate required parameters BEFORE calling a tool.
+    3. If required parameters are missing, DO NOT call the tool — fetch them using other tools OR escalate.
+    4. DO NOT hallucinate tool results, confirmations, or actions.
+    5. Tool responses are the SINGLE SOURCE OF TRUTH.
+    6. NEVER retry with the same parameters if a previous attempt failed.
+    7. If an error occurs, your response MUST explain:
+       - What failed
+       - Why it failed (exact error message)
+       - What corrective action was taken
+    8. NEVER enter a delegation loop. If failure cannot be resolved, escalate with explanation.
+    9. If you cannot verify tool success, you MUST respond:
+       "I cannot confirm execution because the tool did not return a success state."  
+    10. ROUTING TOOLS DO NOT COUNT AS EXECUTION.
+        If the only tool used was a transfer or routing tool, 
+        you MUST respond:
+            "Task not yet executed. Awaiting action tool confirmation." 
+    11. CRITICAL: If a tool returns an error starting with "Error:", treat it as FAILURE.
+        Parse the error message and take corrective action (e.g., fetch missing parameters).
+    12. NEVER say "I have completed" or "I have sent" unless you have PROOF from a tool response.
+    
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    EXECUTION FLOW (MANDATORY):
+
+    STEP 1: Analyze user request → Identify correct tool  
+    STEP 2: Validate ALL required parameters  
+    STEP 3: If missing parameters → Fetch via supporting tools OR escalate  
+    STEP 4: Execute tool  
+    STEP 5: Verify tool response  
+        - If response contains "Error:" → Treat as FAILURE, analyze error, retry with fixes
+        - If response is successful → Treat as SUCCESS  
+    STEP 6: Respond with structured result  
+    STEP 7: Transfer back to supervisor
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    RESPONSE FORMAT:
+
+    ✅ SUCCESS:
+    Action Completed: <what happened>
+    Tool Used: <tool name>
+    Evidence: <tool response summary>
+
+    ❌ FAILURE:
+    Action Failed: <what was attempted>
+    Reason: <error from tool>
+    Resolution: <what you changed or why you escalated>
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    FINAL RULE:
+    You exist to EXECUTE and VERIFY, not to narrate optimism.
+
+    When finished, ALWAYS transfer back to supervisor with a clear status.
+    """
+
 
     @staticmethod
     def _create_args_schema(name: str, schema: Dict[str, Any]) -> Type[BaseModel]:
         """
         Dynamically create a Pydantic model from a JSON schema.
+        Enhanced for Gemini compatibility with complex array types.
         """
+        from typing import List
+        
         properties = schema.get("properties", {})
         required = schema.get("required", [])
         
@@ -59,7 +112,32 @@ Your job is ACTION, not planning. Execute tools immediately.
             elif t == "number":
                 field_type = float
             elif t == "array":
-                field_type = list
+                # Enhanced array handling for Gemini compatibility
+                items = field_info.get("items", {})
+                
+                # If items is empty or doesn't have a type, default to List[str]
+                if not items or not isinstance(items, dict):
+                    field_type = List[str]
+                else:
+                    item_type = items.get("type")
+                    
+                    # If no type specified, check if it's a complex object
+                    if not item_type:
+                        # Complex schema without type - default to List[dict] for objects
+                        if items.get("properties") or items.get("oneOf") or items.get("anyOf"):
+                            field_type = List[dict]
+                        else:
+                            field_type = List[str]
+                    elif item_type == "integer":
+                        field_type = List[int]
+                    elif item_type == "boolean":
+                        field_type = List[bool]
+                    elif item_type == "number":
+                        field_type = List[float]
+                    elif item_type == "object":
+                        field_type = List[dict]
+                    else:
+                        field_type = List[str]
             elif t == "object":
                 field_type = dict
                 

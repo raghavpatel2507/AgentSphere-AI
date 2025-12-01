@@ -336,6 +336,7 @@ async def main():
                     else:
                         # Simple string content
                         print(f"\n{content}\n")
+
                 else:
                     print(f"\n{last_message}\n")
             
@@ -364,4 +365,3 @@ def sync_main():
 
 if __name__ == "__main__":
     sync_main()
-

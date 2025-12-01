@@ -1,0 +1,51 @@
+--- Debug: List Tools and Inspect Schemas ---
+Init Status: 200
+List Tools Status: 200
+
+Found 38 total tools:
+- ZohoCliq_Send_a_scheduled_message
+- ZohoMail_sendEmail
+- ZohoCliq_Get_Department_Members
+- ZohoCliq_Trigger_Remote_Check_in
+- ZohoCliq_Get_Department_Details
+- ZohoCliq_Get_Channel_Members
+- ZohoCliq_Get_Designation_Details
+- ZohoCliq_Get_Designation_Members
+- ZohoCliq_Get_Event_Details
+- ZohoCliq_Get_Events
+- ZohoCliq_Get_Files
+- ZohoCliq_Get_main_message_of_a_thread
+- ZohoCliq_Get_Messages
+- ZohoCliq_Get_non-followers_of_a_thread
+- ZohoCliq_Get_Participants_of_a_call_or_meeting
+- ZohoCliq_Get_Reactions
+- ZohoCliq_Get_permissions_of_a_role
+- ZohoCliq_Get_Roles
+- ZohoCliq_Get_remote_status
+- ZohoCliq_Get_Team_Members
+- ZohoCliq_Get_the_list_of_all_reminders
+- ZohoCliq_Get_threads_of_a_channel
+- ZohoCliq_Get_thread_followers
+- ZohoCliq_Get_Calendars
+- ZohoCliq_Get_all_userfields
+- ZohoCliq_List_all_Departments
+- ZohoCliq_Retrieve_all_direct_chats
+- ZohoCliq_Retrieve_the_members_of_a_chat
+- ZohoCliq_Share_files_in_a_chat
+- ZohoCliq_Post_message_in_chat
+- ZohoCliq_Fetch_list_of_user_teams
+- ZohoCliq_List_all_channels
+- ZohoCliq_List_all_Teams
+- ZohoCliq_List_records
+- ZohoCliq_Retrieve_role_details
+- ZohoCliq_Update_user_details
+- ZohoMail_getAccountDetails
+- ZohoMail_getMailAccounts
+
+--- Attempting to call ZohoMail_getMailAccounts ---
+Call Status: 401
+Response: {"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"[2, {\"msg\":\"Error while processing!\",\"errorCode\":\"INVALID_OAUTHSCOPE\",\"authFail\":\"true\",\"status\":\"401\"}]"}],"isError":true}}
+
+--- Attempting to call ZohoCliq_Retrieve_all_direct_chats ---
+Call Status: 401
+Response: {"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"{\"code\":\"oauthtoken_scope_invalid\",\"message\":\"The OAuth token passed does not have the required scope.\"}\n\n\n"}],"isError":true}}

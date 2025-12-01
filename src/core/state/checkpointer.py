@@ -3,31 +3,37 @@ PostgreSQL Checkpointer for LangGraph with multi-tenant support.
 
 This module provides the PostgreSQL checkpointer instance for LangGraph
 workflows, with connection pooling and tenant-scoped thread management.
+
+Uses FilteredAsyncPostgresSaver to automatically strip unnecessary metadata
+(like Gemini signatures) before saving to reduce database storage.
 """
 
 import asyncio
 import os
 from typing import Optional
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from src.core.state.filtered_checkpointer import FilteredAsyncPostgresSaver
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # Global checkpointer instance and context manager
-_checkpointer: Optional[AsyncPostgresSaver] = None
+_checkpointer: Optional[FilteredAsyncPostgresSaver] = None
 _checkpointer_cm = None
 _initialized = False
 
 
-async def init_checkpointer() -> AsyncPostgresSaver:
+async def init_checkpointer() -> FilteredAsyncPostgresSaver:
     """
-    Initialize the PostgreSQL checkpointer.
+    Initialize the PostgreSQL checkpointer with automatic signature filtering.
     
     This should be called once at application startup.
     Creates the necessary checkpoint tables if they don't exist.
     
+    Uses FilteredAsyncPostgresSaver to automatically strip Gemini signatures
+    and other unnecessary metadata before saving to database.
+    
     Returns:
-        AsyncPostgresSaver: The initialized checkpointer instance
+        FilteredAsyncPostgresSaver: The initialized checkpointer instance
     """
     global _checkpointer, _checkpointer_cm, _initialized
     
@@ -41,8 +47,8 @@ async def init_checkpointer() -> AsyncPostgresSaver:
     # langgraph-checkpoint-postgres v3.x uses psycopg, not asyncpg
     psycopg_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
     
-    # Create the checkpointer context manager
-    _checkpointer_cm = AsyncPostgresSaver.from_conn_string(psycopg_url)
+    # Create the filtered checkpointer context manager
+    _checkpointer_cm = FilteredAsyncPostgresSaver.from_conn_string(psycopg_url)
     
     # Enter the context manager to get the actual checkpointer
     _checkpointer = await _checkpointer_cm.__aenter__()
@@ -51,19 +57,19 @@ async def init_checkpointer() -> AsyncPostgresSaver:
     await _checkpointer.setup()
     
     _initialized = True
-    print("✅ PostgreSQL checkpointer initialized")
+    print("✅ PostgreSQL checkpointer initialized (with signature filtering)")
     
     return _checkpointer
 
 
-def get_checkpointer() -> AsyncPostgresSaver:
+def get_checkpointer() -> FilteredAsyncPostgresSaver:
     """
     Get the singleton checkpointer instance.
     
     Must call init_checkpointer() first before using this function.
     
     Returns:
-        AsyncPostgresSaver: The checkpointer instance
+        FilteredAsyncPostgresSaver: The checkpointer instance
         
     Raises:
         RuntimeError: If checkpointer not initialized
@@ -87,4 +93,3 @@ async def close_checkpointer():
         _checkpointer = None
         _initialized = False
         print("✅ PostgreSQL checkpointer closed")
-

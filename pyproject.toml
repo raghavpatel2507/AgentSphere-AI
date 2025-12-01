@@ -37,4 +37,5 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "sqlalchemy>=2.0.44",
     "sqlalchemy>=2.0.44",
+    "youtube-search>=2.1.2",
 ]

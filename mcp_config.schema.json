@@ -17,7 +17,7 @@
                             "node",
                             "python",
                             "docker",
-                            "remote"
+                            "http"
                         ],
                         "description": "Type of MCP server"
                     },

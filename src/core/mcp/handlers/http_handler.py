@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class HttpMCPHandler(MCPHandler):
     """
     Handler for Remote MCP servers using JSON-RPC over HTTP.
-    Supports session-based authentication (like GitHub Copilot MCP).
+    Supports generic headers and tool default injection via config.
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -29,22 +29,31 @@ class HttpMCPHandler(MCPHandler):
         if not self.url:
             raise ValueError("URL is required for HTTP MCP server")
             
-        # Configure headers from env/config
+        # Configure headers from config
+        config_headers = self.config.get("headers", {})
         env_vars = self.config.get("env", {})
         
-        # Specific handling for GitHub Copilot MCP
-        if "api.githubcopilot.com" in self.url:
-            self.headers["X-MCP-Toolsets"] = "repos"
-            # Try GITHUB_MCP_TOKEN first (as used in working client), then fall back to GITHUB_PERSONAL_ACCESS_TOKEN
-            token = env_vars.get("GITHUB_MCP_TOKEN") or env_vars.get("GITHUB_PERSONAL_ACCESS_TOKEN")
-            if token:
-                # Handle env var substitution if not already done by manager
-                if token.startswith("${") and token.endswith("}"):
-                    token = os.getenv(token[2:-1])
-                if token:
-                    self.headers["Authorization"] = f"Bearer {token}"
-                else:
-                    raise ValueError(f"GitHub MCP token not found in environment variables")
+        for key, value in config_headers.items():
+            # Handle env var substitution
+            if isinstance(value, str) and "${" in value:
+                # Simple substitution for ${VAR}
+                for env_key, env_val in env_vars.items():
+                    # Also check actual os.environ if env_vars has placeholders
+                    if env_val.startswith("${") and env_val.endswith("}"):
+                        env_val = os.getenv(env_val[2:-1]) or ""
+                    
+                    if env_val:
+                        value = value.replace(f"${{{env_key}}}", env_val)
+                
+                # Also try direct substitution from os.environ if not found in env_vars
+                import re
+                matches = re.findall(r"\$\{([A-Za-z0-9_]+)\}", value)
+                for match in matches:
+                    env_val = os.getenv(match)
+                    if env_val:
+                        value = value.replace(f"${{{match}}}", env_val)
+            
+            self.headers[key] = value
         
         self.client = httpx.AsyncClient(headers=self.headers, timeout=30.0)
         
@@ -71,7 +80,7 @@ class HttpMCPHandler(MCPHandler):
                 safe_headers["Authorization"] = f"Bearer {token_preview}..."
             print(f"🔍 Connecting to {self.url}")
             print(f"🔍 Headers: {safe_headers}")
-            print(f"🔍 Payload: {json.dumps(payload, indent=2)}")
+            # print(f"🔍 Payload: {json.dumps(payload, indent=2)}")
             logger.debug(f"Connecting to {self.url}")
             logger.debug(f"Headers: {safe_headers}")
             logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
@@ -80,7 +89,7 @@ class HttpMCPHandler(MCPHandler):
             
             # Log response for debugging
             print(f"🔍 Response Status: {response.status_code}")
-            print(f"🔍 Response Headers: {dict(response.headers)}")
+            # print(f"🔍 Response Headers: {dict(response.headers)}")
             if response.status_code != 200:
                 print(f"🔍 Response Body: {response.text}")
             
@@ -136,26 +145,47 @@ class HttpMCPHandler(MCPHandler):
             
         tools_data = data.get("result", {}).get("tools", [])
         
-        # Get owner for schema injection
+        # Get tool defaults from config
+        tool_defaults = self.config.get("tool_defaults", {})
         env_vars = self.config.get("env", {})
-        owner = env_vars.get("GITHUB_USERNAME")
-        if owner and owner.startswith("${") and owner.endswith("}"):
-            owner = os.getenv(owner[2:-1])
+        
+        # Resolve env vars in defaults
+        resolved_defaults = {}
+        for k, v in tool_defaults.items():
+            if isinstance(v, str) and "${" in v:
+                 # Simple substitution for ${VAR}
+                for env_key, env_val in env_vars.items():
+                    if env_val.startswith("${") and env_val.endswith("}"):
+                        env_val = os.getenv(env_val[2:-1]) or ""
+                    if env_val:
+                        v = v.replace(f"${{{env_key}}}", env_val)
+                
+                import re
+                matches = re.findall(r"\$\{([A-Za-z0-9_]+)\}", v)
+                for match in matches:
+                    env_val = os.getenv(match)
+                    if env_val:
+                        v = v.replace(f"${{{match}}}", env_val)
+            resolved_defaults[k] = v
         
         # Convert to MCP Tool objects
         tools = []
         for t in tools_data:
             input_schema = t.get("inputSchema", {"type": "object", "properties": {}, "required": []})
             
-            # Inject owner parameter with default value for GitHub tools (matching client.py)
-            if "api.githubcopilot.com" in self.url and owner:
-                if "properties" in input_schema and "owner" not in input_schema["properties"]:
-                    input_schema["properties"]["owner"] = {
-                        "type": "string",
-                        "description": f"Repository owner (default: {owner})",
-                        "default": owner
-                    }
-                    print(f"🔍 Added default owner '{owner}' to tool schema: {t.get('name')}")
+            # Inject defaults into schema
+            if resolved_defaults:
+                if "properties" not in input_schema:
+                    input_schema["properties"] = {}
+                
+                for param, default_val in resolved_defaults.items():
+                    if param not in input_schema["properties"]:
+                        input_schema["properties"][param] = {
+                            "type": "string",
+                            "description": f"Default parameter (injected): {default_val}",
+                            "default": default_val
+                        }
+                        print(f"🔍 Added default parameter '{param}' to tool schema: {t.get('name')}")
             
             tools.append(Tool(
                 name=t.get("name"),
@@ -174,20 +204,29 @@ class HttpMCPHandler(MCPHandler):
         if self.session_id:
             headers["Mcp-Session-Id"] = self.session_id
             
-        # Inject owner for GitHub if missing (matching client.py behavior)
-        if "api.githubcopilot.com" in self.url:
-            if "owner" not in arguments:
-                # Try to find GITHUB_USERNAME in env
-                env_vars = self.config.get("env", {})
-                owner = env_vars.get("GITHUB_USERNAME")
-                if owner:
-                    # Handle env var substitution
-                    if owner.startswith("${") and owner.endswith("}"):
-                        owner = os.getenv(owner[2:-1])
-                    if owner:
-                        arguments = {**arguments, "owner": owner}
-                        print(f"🔍 Auto-injected owner: {owner} for tool: {tool_name}")
-                        logger.info(f"Auto-injected owner parameter: {owner}")
+        # Inject defaults if missing
+        tool_defaults = self.config.get("tool_defaults", {})
+        env_vars = self.config.get("env", {})
+        
+        for param, default_val in tool_defaults.items():
+            if param not in arguments:
+                # Resolve env var if needed (repeating logic for safety, though list_tools does it too)
+                if isinstance(default_val, str) and "${" in default_val:
+                     for env_key, env_val in env_vars.items():
+                        if env_val.startswith("${") and env_val.endswith("}"):
+                            env_val = os.getenv(env_val[2:-1]) or ""
+                        if env_val:
+                            default_val = default_val.replace(f"${{{env_key}}}", env_val)
+                     import re
+                     matches = re.findall(r"\$\{([A-Za-z0-9_]+)\}", default_val)
+                     for match in matches:
+                        env_val = os.getenv(match)
+                        if env_val:
+                            default_val = default_val.replace(f"${{{match}}}", env_val)
+                
+                arguments[param] = default_val
+                print(f"🔍 Auto-injected parameter: {param}={default_val} for tool: {tool_name}")
+                logger.info(f"Auto-injected parameter: {param}")
 
         payload = {
             "jsonrpc": "2.0",
@@ -199,31 +238,44 @@ class HttpMCPHandler(MCPHandler):
             },
         }
         
-        response = await self.client.post(self.url, json=payload, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        
-        if "error" in data:
-            raise RuntimeError(f"Tool execution error: {data['error']}")
+        try:
+            response = await self.client.post(self.url, json=payload, headers=headers)
             
-        result = data.get("result", {})
-        if result.get("isError"):
-             content = result.get("content", [{"text": "Unknown error"}])
-             text = "".join([c.get("text", "") for c in content])
-             raise RuntimeError(f"Tool execution failed: {text}")
-             
-        # Return the content
-        content = result.get("content", [])
-        
-        # Debug: print full response for file reading tools
-        if "file" in tool_name.lower() or "read" in tool_name.lower():
-            print(f"🔍 Full API Response for {tool_name}:")
-            print(f"🔍 Result: {json.dumps(result, indent=2)[:500]}...")
-        
-        if content and "text" in content[0]:
-            try:
-                # Try to parse as JSON if it looks like it
-                return json.loads(content[0]["text"])
-            except:
-                return content[0]["text"]
-        return result
+            # Handle HTTP errors gracefully
+            if response.status_code != 200:
+                error_msg = f"HTTP Error {response.status_code}: {response.text}"
+                logger.error(f"Tool call failed: {error_msg}")
+                return f"Error: {error_msg}"
+                
+            data = response.json()
+            
+            if "error" in data:
+                return f"Error: MCP Protocol Error: {data['error']}"
+                
+            result = data.get("result", {})
+            
+            # Handle Tool execution errors gracefully
+            if result.get("isError"):
+                 content = result.get("content", [{"text": "Unknown error"}])
+                 text = "".join([c.get("text", "") for c in content])
+                 return f"Error: Tool execution failed: {text}"
+                 
+            # Return the content
+            content = result.get("content", [])
+            
+            # Debug: print full response for file reading tools
+            if "file" in tool_name.lower() or "read" in tool_name.lower():
+                print(f"🔍 Full API Response for {tool_name}:")
+                print(f"🔍 Result: {json.dumps(result, indent=2)[:500]}...")
+            
+            if content and "text" in content[0]:
+                try:
+                    # Try to parse as JSON if it looks like it
+                    return json.loads(content[0]["text"])
+                except:
+                    return content[0]["text"]
+            return result
+            
+        except Exception as e:
+            logger.error(f"Unexpected error calling tool {tool_name}: {e}")
+            return f"Error: Unexpected exception: {str(e)}"

@@ -8,7 +8,7 @@ from .handlers.base import MCPHandler
 from .handlers.node_handler import NodeMCPHandler
 from .handlers.python_handler import PythonMCPHandler
 from .handlers.docker_handler import DockerMCPHandler
-from .handlers.remote_handler import RemoteMCPHandler
+from .handlers.docker_handler import DockerMCPHandler
 from .handlers.http_handler import HttpMCPHandler
 
 logger = logging.getLogger(__name__)
@@ -79,8 +79,6 @@ class MCPManager:
             return PythonMCPHandler(config)
         elif server_type == "docker":
             return DockerMCPHandler(config)
-        elif server_type == "remote":
-            return RemoteMCPHandler(config)
         elif server_type == "httpx":
             return HttpMCPHandler(config)
         else:
