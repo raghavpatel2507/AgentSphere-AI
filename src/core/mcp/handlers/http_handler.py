@@ -21,6 +21,7 @@ class HttpMCPHandler(MCPHandler):
         self.client: Optional[httpx.AsyncClient] = None
         self.headers = {
             "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
             "User-Agent": "agent-sphere-ai/1.0"
         }
         
@@ -107,6 +108,22 @@ class HttpMCPHandler(MCPHandler):
                 logger.warning(f"No session ID received from {self.url}")
             else:
                 logger.info(f"Connected to {self.name} with session ID: {self.session_id}")
+            
+            # Send 'initialized' notification to complete handshake
+            # This is required by the MCP protocol after initialize succeeds
+            initialized_payload = {
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+                "params": {}
+            }
+            
+            headers_with_session = self.headers.copy()
+            if self.session_id:
+                headers_with_session["Mcp-Session-Id"] = self.session_id
+            
+            # Send notification (no response expected for notifications)
+            await self.client.post(self.url, json=initialized_payload, headers=headers_with_session)
+            logger.debug(f"Sent 'initialized' notification to {self.name}")
                 
         except Exception as e:
             logger.error(f"Failed to connect to {self.name}: {e}")
@@ -268,13 +285,14 @@ class HttpMCPHandler(MCPHandler):
                 print(f"🔍 Full API Response for {tool_name}:")
                 print(f"🔍 Result: {json.dumps(result, indent=2)[:500]}...")
             
-            if content and "text" in content[0]:
-                try:
-                    # Try to parse as JSON if it looks like it
-                    return json.loads(content[0]["text"])
-                except:
-                    return content[0]["text"]
-            return result
+            # if content and "text" in content[0]:
+            #     try:
+            #         # Try to parse as JSON if it looks like it
+            #         return json.loads(content[0]["text"])
+            #     except:
+            #         return content[0]["text"]
+            # return result
+            return content
             
         except Exception as e:
             logger.error(f"Unexpected error calling tool {tool_name}: {e}")

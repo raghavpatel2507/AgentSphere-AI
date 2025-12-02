@@ -63,7 +63,14 @@ class NodeMCPHandler(MCPHandler):
             raise
             
     async def disconnect(self):
+        """Disconnect from the MCP server with proper error handling."""
         if self.exit_stack:
-            await self.exit_stack.aclose()
+            try:
+                await self.exit_stack.aclose()
+            except (RuntimeError, GeneratorExit, Exception) as e:
+                # Suppress expected cleanup errors during shutdown
+                # These are normal when exiting and don't indicate a problem
+                if "cancel scope" not in str(e) and "GeneratorExit" not in str(e):
+                    logger.debug(f"Error during disconnect (expected during shutdown): {e}")
         self.session = None
         self.exit_stack = None
