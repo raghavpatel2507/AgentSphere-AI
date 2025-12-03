@@ -28,6 +28,7 @@ class HttpMCPHandler(MCPHandler):
         # Base headers
         self.headers = {
             "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
             "User-Agent": "agent-sphere-ai/1.0"
         }
 

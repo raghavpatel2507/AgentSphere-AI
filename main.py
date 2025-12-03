@@ -19,6 +19,7 @@ from src.core.state import (
     clear_current_session,
     get_config_for_thread
 )
+from src.core.mcp.manager import MCPManager
 
 
 
@@ -116,6 +117,11 @@ async def main():
             # Handle commands
             if user_input.lower() == "/exit":
                 print("\n👋 Goodbye!\n")
+                # Cleanup MCP connections before exit
+                print("🔄 Cleaning up MCP connections...")
+                manager = MCPManager()
+                await manager.cleanup()
+                print("✅ Cleanup complete\n")
                 break
             
             elif user_input.lower() == "/new":
@@ -345,6 +351,11 @@ async def main():
         
         except KeyboardInterrupt:
             print("\n\n👋 Interrupted by user. Goodbye!\n")
+            # Cleanup MCP connections before exit
+            print("🔄 Cleaning up MCP connections...")
+            manager = MCPManager()
+            await manager.cleanup()
+            print("✅ Cleanup complete\n")
             break
         
         except Exception as e:

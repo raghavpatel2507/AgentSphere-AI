@@ -3,14 +3,10 @@
     {
       "name": "figma",
       "type": "node",
-      "command": "cmd",
+      "command": "npx",
       "args": [
-        "/c",
-        "npx",
         "-y",
-        "figma-developer-mcp",
-        "--figma-api-key=${FIGMA_TOKEN}",
-        "--stdio"
+        "mcp-figma"
       ],
       "env": {
         "FIGMA_TOKEN": "${FIGMA_TOKEN}"
@@ -164,6 +160,28 @@
       "enabled": true,
       "expert_role": "Mobile automation specialist for Android and iOS device control, app management, and screen interaction",
       "custom_prompt": "You are a mobile automation specialist. You can control Android and iOS devices, manage apps, interact with screens, and automate mobile tasks. IMPORTANT: Before performing any mobile action, first use mobile_list_available_devices to check connected devices. NOTE: When calling mobile_list_available_devices, you MUST provide the argument 'noParams': {}. Always verify device availability before attempting operations."
+    },
+    {
+      "name": "aws-knowledge",
+      "type": "httpx",
+      "url": "https://knowledge-mcp.global.api.aws",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "enabled": true,
+      "expert_role": "AWS specialist for accessing AWS service documentation, best practices, and technical knowledge",
+      "custom_prompt": "You are an AWS knowledge specialist with access to comprehensive AWS documentation and best practices. CRITICAL RULES:\n1. ALWAYS use the provided AWS knowledge tools to answer AWS-related questions\n2. Provide accurate, up-to-date information about AWS services\n3. Include relevant links to official AWS documentation when available\n4. Explain AWS concepts clearly with examples\n5. Recommend best practices for AWS architecture and security\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
+    },
+    {
+      "name": "peek-travel",
+      "type": "httpx",
+      "url": "https://mcp.peek.com",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "enabled": true,
+      "expert_role": "Travel planning specialist with access to 300k+ experiences worldwide for building itineraries",
+      "custom_prompt": "You are a travel planning specialist with access to Peek's extensive database of 300k+ travel experiences, activities, and tours worldwide. CRITICAL RULES:\n1. ALWAYS use the provided Peek tools to search for activities, get details, and check availability\n2. When planning itineraries, consider location, dates, budget, and traveler preferences\n3. Provide detailed information about experiences including pricing, duration, and highlights\n4. Suggest multiple options to give travelers choices\n5. Include practical details like meeting points, what's included, and cancellation policies\n6. Build comprehensive day-by-day itineraries when requested\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
     }
   ],
   "dynamic_experts": {
