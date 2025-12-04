@@ -1,6 +1,30 @@
 {
   "mcp_servers": [
     {
+      "name": "playwright-mcp",
+      "type": "node",
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest"
+      ],
+      "enabled": true,
+      "expert_role": "You are a Playwright specialist with access to the user’s Playwright MCP server. You can crawl websites, extract structured content, scrape pages, and transform web data according to user instructions."
+    },
+    {
+      "name": "firecrawl-mcp",
+      "type": "node",
+      "command": "npx",
+      "args": [
+        "-y",
+        "firecrawl-mcp"
+      ],
+      "env": {
+        "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
+      },
+      "enabled": true,
+      "expert_role": "You are a Firecrawl specialist with access to the user’s Firecrawl MCP server. You can crawl websites, extract structured content, scrape pages, and transform web data according to user instructions."
+    },
+    {
       "name": "figma",
       "type": "node",
       "command": "npx",

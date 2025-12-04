@@ -1,5 +1,7 @@
 import sys
 import os
+import asyncio
+import warnings
 from typing import Dict, Any
 from contextlib import AsyncExitStack
 from mcp import ClientSession, StdioServerParameters
@@ -8,6 +10,9 @@ from .base import MCPHandler
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Suppress the anyio cancel scope warnings that occur during cleanup
+warnings.filterwarnings('ignore', message='.*cancel scope.*')
 
 class NodeMCPHandler(MCPHandler):
     """
@@ -66,11 +71,20 @@ class NodeMCPHandler(MCPHandler):
         """Disconnect from the MCP server with proper error handling."""
         if self.exit_stack:
             try:
+                # Cancel any pending tasks first to avoid cancel scope errors
+                await asyncio.sleep(0)  # Allow pending tasks to complete
                 await self.exit_stack.aclose()
-            except (RuntimeError, GeneratorExit, Exception) as e:
+            except (RuntimeError, GeneratorExit, BaseExceptionGroup) as e:
                 # Suppress expected cleanup errors during shutdown
                 # These are normal when exiting and don't indicate a problem
-                if "cancel scope" not in str(e) and "GeneratorExit" not in str(e):
+                error_msg = str(e)
+                if any(msg in error_msg for msg in ["cancel scope", "GeneratorExit", "unhandled errors in a TaskGroup"]):
+                    # This is expected during cleanup, silently ignore
+                    pass
+                else:
                     logger.debug(f"Error during disconnect (expected during shutdown): {e}")
+            except Exception as e:
+                # Catch any other exceptions to prevent them from propagating
+                logger.debug(f"Unexpected error during disconnect: {e}")
         self.session = None
         self.exit_stack = None

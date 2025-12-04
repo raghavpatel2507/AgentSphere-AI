@@ -365,13 +365,41 @@ async def main():
             print()
 
 
+def custom_exception_handler(loop, context):
+    """Custom exception handler to suppress known MCP cleanup errors."""
+    exception = context.get("exception")
+    message = context.get("message", "")
+    
+    # Suppress known anyio cancel scope errors during MCP cleanup
+    if exception and isinstance(exception, RuntimeError):
+        error_msg = str(exception)
+        if "cancel scope" in error_msg or "GeneratorExit" in error_msg:
+            # This is expected during MCP server cleanup, silently ignore
+            return
+    
+    # Suppress BaseExceptionGroup errors from anyio task groups
+    if "unhandled errors in a TaskGroup" in message:
+        return
+    
+    # For all other exceptions, use the default handler
+    loop.default_exception_handler(context)
+
+
 def sync_main():
     """Synchronous wrapper for async main."""
     if os.name == 'nt':
         # Windows workaround for psycopg: use SelectorEventLoop
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     
-    asyncio.run(main())
+    # Set custom exception handler to suppress MCP cleanup errors
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.set_exception_handler(custom_exception_handler)
+    
+    try:
+        loop.run_until_complete(main())
+    finally:
+        loop.close()
 
 
 if __name__ == "__main__":
