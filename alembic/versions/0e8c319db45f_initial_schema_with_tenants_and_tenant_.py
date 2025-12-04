@@ -44,6 +44,23 @@ def upgrade() -> None:
     op.create_index(op.f('ix_tenants_api_key'), 'tenants', ['api_key'], unique=True)
     op.create_index(op.f('ix_tenants_is_active'), 'tenants', ['is_active'], unique=False)
     # ### end Alembic commands ###
+    
+    # Create default tenant for development/CLI usage
+    # Only insert if it doesn't already exist (idempotent)
+    op.execute("""
+        INSERT INTO tenants (id, name, api_key, is_active, metadata, created_at, updated_at)
+        SELECT 
+            gen_random_uuid(),
+            'Default Tenant',
+            'dev_api_key_12345',
+            true,
+            '{"environment": "development", "created_by": "alembic_migration"}'::json,
+            now(),
+            now()
+        WHERE NOT EXISTS (
+            SELECT 1 FROM tenants WHERE api_key = 'dev_api_key_12345'
+        );
+    """)
 
 
 def downgrade() -> None:

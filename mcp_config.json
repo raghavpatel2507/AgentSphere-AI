@@ -1,6 +1,20 @@
 {
   "mcp_servers": [
     {
+      "name": "figma",
+      "type": "node",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-figma"
+      ],
+      "env": {
+        "FIGMA_TOKEN": "${FIGMA_TOKEN}"
+      },
+      "enabled": true,
+      "expert_role": "Figma specialist for design operations and code generation through design"
+    },
+    {
       "name": "youtube",
       "type": "node",
       "command": "npx",
@@ -17,7 +31,7 @@
     {
       "name": "filesystem",
       "type": "python",
-      "command": "python3",
+      "command": "python",
       "args": [
         "src/mcp_servers/file-system-mcp-server/file-system-mcp-server/fs_server.py"
       ],
@@ -63,7 +77,7 @@
     {
       "name": "discord",
       "type": "python",
-      "command": "python3",
+      "command": "python",
       "args": [
         "main.py"
       ],
