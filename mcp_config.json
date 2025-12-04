@@ -11,7 +11,7 @@
       "env": {
         "YOUTUBE_API_KEY": "${YOUTUBE_API_KEY}"
       },
-      "enabled": false,
+      "enabled": true,
       "expert_role": "YouTube specialist for video search, details, comments, and summarization"
     },
     {
@@ -22,7 +22,7 @@
         "src/mcp_servers/file-system-mcp-server/file-system-mcp-server/fs_server.py"
       ],
       "cwd": ".",
-      "enabled": false,
+      "enabled": true,
       "expert_role": "File system manager for reading, writing, and organizing files"
     },
     {
@@ -37,7 +37,7 @@
         "--token",
         "src/configs/gmail_token.json"
       ],
-      "enabled": false,
+      "enabled": true,
       "expert_role": "Email specialist for Gmail operations",
       "custom_prompt": "You are a Gmail specialist with access to the user's Gmail account.\n\nCRITICAL RULES:\n1. ALWAYS use the provided Gmail tools for email operations\n2. Respect user privacy and data sensitivity\n3. Format email content clearly when presenting to users\n4. Handle authentication errors gracefully\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
     },
@@ -73,7 +73,7 @@
         "DISCORD_PASSWORD": "${DISCORD_PASSWORD}",
         "DISCORD_HEADLESS": "true"
       },
-      "enabled": false,
+      "enabled": true,
       "expert_role": "Discord communication specialist for managing channels and messages"
     },
     {
@@ -89,7 +89,7 @@
       "headers": {
         "Content-Type": "application/json"
       },
-      "enabled": false,
+      "enabled": true,
       "expert_role": "Zoho specialist for managing Zoho applications and data"
     },
     {
@@ -103,7 +103,7 @@
       "env": {
         "NOTION_TOKEN": "${NOTION_TOKEN}"
       },
-      "enabled": false,
+      "enabled": true,
       "expert_role": "Notion specialist for managing pages, databases, and workspace content",
       "custom_prompt": "You are a Notion specialist with access to the user's Notion workspace.\n\nCRITICAL RULES:\n1. ALWAYS use the provided Notion tools to query pages, databases, and comments\n2. When searching, use specific keywords to narrow down results\n3. For database queries, respect the user's access permissions\n4. Format Notion content clearly when presenting to users\n5. If a tool fails, check if the page/database is connected to the integration\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
     },
@@ -117,7 +117,7 @@
       "env": {
         "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "${GOOGLE_DRIVE_OAUTH_CREDENTIALS}"
       },
-      "enabled": false,
+      "enabled": true,
       "expert_role": "Google Drive specialist for managing files, docs, sheets, and slides"
     },
     {
@@ -130,7 +130,7 @@
         "ppt_mcp_server"
       ],
       "cwd": ".",
-      "enabled": false,
+      "enabled": true,
       "expert_role": "PowerPoint specialist for creating, editing, and manipulating presentations with professional design",
       "custom_prompt": "You are a PowerPoint specialist. CRITICAL WORKFLOW: Before using ANY presentation manipulation tools (like auto_generate_presentation, add_slide, add_text, etc.), you MUST first call create_presentation to initialize a new presentation. The create_presentation tool returns a presentation_id that other tools will use. WORKFLOW: 1) create_presentation (ALWAYS FIRST), 2) Use other tools to manipulate the presentation, 3) save_presentation when done. If a tool fails with 'No presentation is currently loaded', it means you forgot step 1."
     },
@@ -143,7 +143,7 @@
         "@mobilenext/mobile-mcp"
       ],
       "cwd": ".",
-      "enabled": false,
+      "enabled": true,
       "expert_role": "Mobile automation specialist for Android and iOS device control, app management, and screen interaction",
       "custom_prompt": "You are a mobile automation specialist. You can control Android and iOS devices, manage apps, interact with screens, and automate mobile tasks. IMPORTANT: Before performing any mobile action, first use mobile_list_available_devices to check connected devices. NOTE: When calling mobile_list_available_devices, you MUST provide the argument 'noParams': {}. Always verify device availability before attempting operations."
     },
@@ -154,7 +154,7 @@
       "headers": {
         "Content-Type": "application/json"
       },
-      "enabled": false,
+      "enabled": true,
       "expert_role": "AWS specialist for accessing AWS service documentation, best practices, and technical knowledge",
       "custom_prompt": "You are an AWS knowledge specialist with access to comprehensive AWS documentation and best practices. CRITICAL RULES:\n1. ALWAYS use the provided AWS knowledge tools to answer AWS-related questions\n2. Provide accurate, up-to-date information about AWS services\n3. Include relevant links to official AWS documentation when available\n4. Explain AWS concepts clearly with examples\n5. Recommend best practices for AWS architecture and security\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
     },
@@ -165,9 +165,21 @@
       "headers": {
         "Content-Type": "application/json"
       },
-      "enabled": false,
+      "enabled": true,
       "expert_role": "Travel planning specialist with access to 300k+ experiences worldwide for building itineraries",
       "custom_prompt": "You are a travel planning specialist with access to Peek's extensive database of 300k+ travel experiences, activities, and tours worldwide. CRITICAL RULES:\n1. ALWAYS use the provided Peek tools to search for activities, get details, and check availability\n2. When planning itineraries, consider location, dates, budget, and traveler preferences\n3. Provide detailed information about experiences including pricing, duration, and highlights\n4. Suggest multiple options to give travelers choices\n5. Include practical details like meeting points, what's included, and cancellation policies\n6. Build comprehensive day-by-day itineraries when requested\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
+    },
+    {
+      "name": "figma",
+      "type": "node",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-figma"
+      ],
+      "enabled": true,
+      "expert_role": "Figma design specialist for accessing files, components, styles, and managing design assets",
+      "custom_prompt": "You are a Figma specialist with access to Figma's API. CRITICAL RULES:\n1. ALWAYS use the provided Figma tools to access design files, components, and styles\n2. Before using any Figma tools, check if the API key is configured using check_api_key\n3. If no API key is set, guide the user to set it using set_api_key with their Figma personal access token\n4. When accessing files, you'll need the Figma file key (found in the file URL)\n5. Provide clear information about design elements, components, and styles\n6. Handle comments and collaboration features professionally\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
     }
   ],
   "dynamic_experts": {
@@ -176,9 +188,9 @@
     "expert_template": "You are a {expert_role}.\n\nAvailable Tools:\n{tools}\n\nRULES:\n1. ALWAYS use the provided tools to answer user requests.\n2. Do NOT hallucinate tool outputs.\n3. If a tool is available for the task, USE IT.\n4. After using a tool, report the result clearly.\n5. ALWAYS transfer back to the supervisor when done.\n\nYour job is ACTION, not planning. Execute tools immediately."
   },
   "llm": {
-    "provider": "groq",
-    "model": "openai/gpt-oss-120b",
-    "temperature": 0.7,
+    "provider": "gemini",
+    "model": "gemini-2.5-flash",
+    "temperature": 0.3,
     "max_tokens": 100000
   }
 }

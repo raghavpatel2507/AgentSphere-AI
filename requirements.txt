@@ -110,3 +110,4 @@ playwright
 python-pptx>=0.6.21
 Pillow>=8.0.0
 fonttools>=4.0.0
+langsmith>=0.1.0

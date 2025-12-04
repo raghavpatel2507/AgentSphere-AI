@@ -38,6 +38,12 @@ MAX_TOKENS = llm_config.get("max_tokens", 100000)
 try:
     model = LLMFactory.create_llm(llm_config)
     print(f"✅ LLM Initialized: {llm_config.get('provider')} / {MODEL_NAME}")
+    
+    # Check for LangSmith
+    if os.getenv("LANGCHAIN_TRACING_V2") == "true":
+        print(f"✅ LangSmith Tracing Enabled (Project: {os.getenv('LANGCHAIN_PROJECT', 'default')})")
+    else:
+        print("ℹ️ LangSmith Tracing Disabled (Set LANGCHAIN_TRACING_V2=true to enable)")
 except Exception as e:
     print(f"❌ Failed to initialize LLM: {e}")
     # Fallback to OpenAI if possible, or raise

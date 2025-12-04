@@ -1,7 +1,6 @@
 from langgraph_supervisor import create_supervisor
 from langchain_core.messages import trim_messages
 from src.core.agents.model import model, MAX_TOKENS
-from src.core.agents.system_prompt import system_prompt_supervisor
 from src.core.agents.agent import *
 from src.core.mcp.manager import MCPManager
 
