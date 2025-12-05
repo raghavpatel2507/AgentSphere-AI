@@ -277,11 +277,38 @@ async def main():
                 print("⚠️  HUMAN-IN-THE-LOOP: Tool Execution Requires Approval")
                 print("=" * 60)
                 
-                # Show pending tasks
-                if state.tasks:
-                    print(f"\n📋 Pending Action: {len(state.tasks)} tool(s) waiting for approval")
+                # Check if this is a tool approval interrupt
+                interrupt_data = None
+                if hasattr(state, 'tasks') and state.tasks:
+                    # Try to extract interrupt data from tasks
                     for task in state.tasks:
-                        print(f"   - {task}")
+                        if hasattr(task, 'interrupts') and task.interrupts:
+                            for interrupt_item in task.interrupts:
+                                # Interrupt objects have a 'value' attribute
+                                if hasattr(interrupt_item, 'value'):
+                                    interrupt_data = interrupt_item.value
+                                    break
+                                elif isinstance(interrupt_item, dict):
+                                    interrupt_data = interrupt_item
+                                    break
+                            if interrupt_data:
+                                break
+                
+                # Display tool information if available
+                if interrupt_data and interrupt_data.get("event") == "tool_approval_required":
+                    tool_name = interrupt_data.get("tool_name", "Unknown")
+                    tool_args = interrupt_data.get("tool_args", {})
+                    
+                    print(f"\n🛠️  Tool: {tool_name}")
+                    print(f"📋 Arguments:")
+                    for key, value in tool_args.items():
+                        # Truncate long values for display
+                        display_value = str(value)[:200] + "..." if len(str(value)) > 200 else str(value)
+                        print(f"   - {key}: {display_value}")
+                else:
+                    # Fallback display - should not happen with proper interrupt setup
+                    print(f"\n⚠️  Waiting for approval to continue execution...")
+
                 
                 # Request approval
                 print("\nOptions:")

@@ -150,18 +150,48 @@ def get_app(checkpointer=None):
     workflow = create_workflow()
     
     if checkpointer is not None:
-        # Build dynamic interrupt list based on enabled agents
-        interrupt_list = ["websearch_expert", "math_expert", "python_expert"]
+        # Build selective interrupt list based on HITL configuration
+        from src.core.agents.hitl_interrupt import load_hitl_config, get_default_config
         
-        # Add dynamic experts to interrupt list
-        if dynamic_experts:
-            interrupt_list.extend(dynamic_experts.keys())
+        config = load_hitl_config()
+        default_config = get_default_config()
+        enabled = config.get("enabled", default_config["enabled"])
+        mode = config.get("mode", default_config["mode"])
         
-        # Compile with checkpointer and interrupt before agent execution
-        return workflow.compile(
-            checkpointer=checkpointer,
-            interrupt_before=interrupt_list  # Pause before agent calls for approval
-        )
+        if enabled and mode != "none":
+            # Build interrupt list based on mode
+            interrupt_list = []
+            
+            if mode == "all":
+                # Interrupt all agents
+                interrupt_list = ["websearch_expert", "math_expert", "python_expert"]
+                if dynamic_experts:
+                    interrupt_list.extend(dynamic_experts.keys())
+            elif mode == "denylist":
+                # Only interrupt agents with sensitive tools
+                sensitive_agents = ["python_expert"]  # python_executor is sensitive
+                # Add MCP agents that have sensitive tools
+                if dynamic_experts:
+                    for agent_name in dynamic_experts.keys():
+                        # playwright-mcp has browser_* tools (sensitive)
+                        if "playwright" in agent_name or "browser" in agent_name:
+                            sensitive_agents.append(agent_name)
+                interrupt_list = sensitive_agents
+            elif mode == "allowlist":
+                # Interrupt all except safe agents
+                safe_agents = ["websearch_expert", "math_expert"]  # search and calculate are safe
+                all_agents = ["websearch_expert", "math_expert", "python_expert"]
+                if dynamic_experts:
+                    all_agents.extend(dynamic_experts.keys())
+                interrupt_list = [a for a in all_agents if a not in safe_agents]
+            
+            return workflow.compile(
+                checkpointer=checkpointer,
+                interrupt_before=interrupt_list
+            )
+        else:
+            # HITL disabled, no interrupts
+            return workflow.compile(checkpointer=checkpointer)
     else:
         # Compile without checkpointer (stateless)
         return workflow.compile()

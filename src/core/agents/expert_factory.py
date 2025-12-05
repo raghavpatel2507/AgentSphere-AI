@@ -4,6 +4,7 @@ from langchain_core.tools import Tool, StructuredTool
 from langchain_core.language_models import BaseChatModel
 from src.core.mcp.manager import MCPManager
 from src.core.mcp.tool_registry import ToolRegistry
+from src.core.agents.hitl_interrupt import request_tool_approval
 from pydantic import create_model, Field, BaseModel
 
 class ExpertFactory:
