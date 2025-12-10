@@ -1,6 +1,19 @@
 {
   "mcp_servers": [
     {
+      "name": "pinecone-mcp",
+      "type": "node",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@pinecone-database/mcp"
+      ],
+      "env": {
+        "PINECONE_API_KEY": "${PINECONE_API_KEY}"
+      },
+      "enabled": true
+    },
+    {
       "name": "playwright-mcp",
       "type": "node",
       "command": "npx",
@@ -253,8 +266,8 @@
     ]
   },
   "llm": {
-    "provider": "gemini",
-    "model": "gemini-2.5-flash",
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
     "temperature": 0.3,
     "max_tokens": 100000
   }

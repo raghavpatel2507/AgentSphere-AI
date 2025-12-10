@@ -3,7 +3,6 @@ from langchain.agents import create_agent
 from langchain_core.tools import Tool, StructuredTool
 from langchain_core.language_models import BaseChatModel
 from src.core.mcp.manager import MCPManager
-from src.core.mcp.tool_registry import ToolRegistry
 from src.core.agents.hitl_interrupt import request_tool_approval
 from pydantic import create_model, Field, BaseModel
 
@@ -93,88 +92,21 @@ class ExpertFactory:
 
 
     @staticmethod
-    def _create_args_schema(name: str, schema: Dict[str, Any]) -> Type[BaseModel]:
-        """
-        Dynamically create a Pydantic model from a JSON schema.
-        Enhanced for Gemini compatibility with complex array types.
-        """
-        from typing import List
-        
-        properties = schema.get("properties", {})
-        required = schema.get("required", [])
-        
-        fields = {}
-        for field_name, field_info in properties.items():
-            field_type = Any
-            t = field_info.get("type")
-            
-            # Basic type mapping
-            if t == "string":
-                field_type = str
-            elif t == "integer":
-                field_type = int
-            elif t == "boolean":
-                field_type = bool
-            elif t == "number":
-                field_type = float
-            elif t == "array":
-                # Enhanced array handling for Gemini compatibility
-                items = field_info.get("items", {})
-                
-                # If items is empty or doesn't have a type, default to List[str]
-                if not items or not isinstance(items, dict):
-                    field_type = List[str]
-                else:
-                    item_type = items.get("type")
-                    
-                    # If no type specified, check if it's a complex object
-                    if not item_type:
-                        # Complex schema without type - default to List[dict] for objects
-                        if items.get("properties") or items.get("oneOf") or items.get("anyOf"):
-                            field_type = List[dict]
-                        else:
-                            field_type = List[str]
-                    elif item_type == "integer":
-                        field_type = List[int]
-                    elif item_type == "boolean":
-                        field_type = List[bool]
-                    elif item_type == "number":
-                        field_type = List[float]
-                    elif item_type == "object":
-                        field_type = List[dict]
-                    else:
-                        field_type = List[str]
-            elif t == "object":
-                field_type = dict
-                
-            description = field_info.get("description", "")
-            
-            # Determine default value
-            if field_name in required:
-                default = ...
-            else:
-                default = None
-                
-            fields[field_name] = (field_type, Field(default=default, description=description))
-            
-        # If no properties, return empty model
-        if not fields:
-            return create_model(f"{name}Schema")
-            
-        return create_model(f"{name}Schema", **fields)
-
-    @staticmethod
     async def create_all_experts(model: BaseChatModel) -> Dict[str, Any]:
         """
         Create all enabled expert agents based on MCP configuration.
         Returns a dictionary of agent_name -> agent_instance.
         """
         manager = MCPManager()
-        # Ensure manager is initialized
+        # Initialize manager if not already done (it should be though)
         if not manager._initialized:
-             # This might need to be awaited if called early, but usually main.py inits it
+             # Just in case
              pass
-             
+        
+        # We need to await initialization if we are running fresh here
+        # But create_all_experts is usually called after main.py logic
+        # However, main.py calls manager.initialize() then get_dynamic_agents() which calls this.
+        
         config = manager.load_config()
         experts = {}
         
@@ -194,33 +126,11 @@ class ExpertFactory:
             expert_role = server.get("expert_role", f"{server_name} specialist")
             custom_prompt = server.get("custom_prompt")
             
-            # Get tools for this server
-            mcp_tools = manager.get_tools_for_server(server_name)
+            # Get tools for this server (now returns LangChain Tools)
+            langchain_tools = await manager.get_tools_for_server(server_name)
             
-            if not mcp_tools:
+            if not langchain_tools:
                 continue
-                
-            # Create LangChain tools wrappers
-            langchain_tools = []
-            for tool_info in mcp_tools:
-                # Create a closure to capture tool_name
-                def make_tool_func(t_name):
-                    async def tool_wrapper(**kwargs):
-                        return await manager.call_tool(t_name, kwargs)
-                    return tool_wrapper
-                
-                # Create dynamic args schema
-                args_schema = ExpertFactory._create_args_schema(tool_info.name, tool_info.schema)
-                
-                # Use StructuredTool for proper schema validation
-                lc_tool = StructuredTool.from_function(
-                    name=tool_info.name,
-                    description=tool_info.description,
-                    func=None, # We use coroutine
-                    coroutine=make_tool_func(tool_info.name),
-                    args_schema=args_schema
-                )
-                langchain_tools.append(lc_tool)
             
             # Generate prompt
             system_prompt = ExpertFactory.create_expert_prompt(
@@ -241,3 +151,4 @@ class ExpertFactory:
             experts[agent_name] = agent
             
         return experts
+
