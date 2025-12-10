@@ -1,0 +1,3178 @@
+{
+  "zoho": [
+    {
+      "name": "ZohoCliq_Send_a_scheduled_message",
+      "description": "Use this API to schedule a message for delivery at a future date and time.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "CHAT_ID": {
+                "description": "The ID of the chat in which the message needs to be scheduled.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHAT_ID"
+            ]
+          },
+          "body": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "schedule_time",
+                  "text"
+                ]
+              },
+              {
+                "type": "object",
+                "required": [
+                  "schedule_status",
+                  "text"
+                ]
+              }
+            ],
+            "description": "Request body for scheduling a message. `text` is mandatory. Either `schedule_time` or `schedule_status` must be provided. `schedule_timezone` is optional.\n",
+            "type": "object",
+            "properties": {
+              "schedule_timezone": {
+                "description": "Timezone of the scheduled time (IANA time zone name). Example: Asia/Kolkata\n",
+                "type": "string"
+              },
+              "schedule_time": {
+                "description": "The scheduled execution time of the message in ISO 8601 basic format (yyyyMMddTHHmmss). Format details: - yyyyMMdd - 2025-02-11 (Year:2025, Month:02, Day:11) - T - Separator indicating the start of the time component - HHmmss - 09:00:00 (Hour:09, Minute:00, Second:00)\n",
+                "type": "string"
+              },
+              "schedule_status": {
+                "description": "Alternative to `schedule_time`. Schedule the message based on user or system events. Allowed values: check_in | user_available | call_end | check_out\n",
+                "type": "string"
+              },
+              "text": {
+                "description": "The text to be sent as a scheduled message. Maximum length: 4096 characters.\n",
+                "type": "string",
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        },
+        "required": [
+          "body",
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Send_a_scheduled_message_bodySchema": {
+            "properties": {
+              "schedule_timezone": {
+                "default": null,
+                "description": "Timezone of the scheduled time (IANA time zone name). Example: Asia/Kolkata\n",
+                "title": "Schedule Timezone",
+                "type": "string"
+              },
+              "schedule_time": {
+                "default": null,
+                "description": "The scheduled execution time of the message in ISO 8601 basic format (yyyyMMddTHHmmss). Format details: - yyyyMMdd - 2025-02-11 (Year:2025, Month:02, Day:11) - T - Separator indicating the start of the time component - HHmmss - 09:00:00 (Hour:09, Minute:00, Second:00)\n",
+                "title": "Schedule Time",
+                "type": "string"
+              },
+              "schedule_status": {
+                "default": null,
+                "description": "Alternative to `schedule_time`. Schedule the message based on user or system events. Allowed values: check_in | user_available | call_end | check_out\n",
+                "title": "Schedule Status",
+                "type": "string"
+              },
+              "text": {
+                "description": "The text to be sent as a scheduled message. Maximum length: 4096 characters.\n",
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "title": "ZohoCliq_Send_a_scheduled_message_bodySchema",
+            "type": "object"
+          },
+          "ZohoCliq_Send_a_scheduled_message_path_variablesSchema": {
+            "properties": {
+              "CHAT_ID": {
+                "description": "The ID of the chat in which the message needs to be scheduled.",
+                "title": "Chat Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHAT_ID"
+            ],
+            "title": "ZohoCliq_Send_a_scheduled_message_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Send_a_scheduled_message_path_variablesSchema",
+            "description": ""
+          },
+          "body": {
+            "$ref": "#/$defs/ZohoCliq_Send_a_scheduled_message_bodySchema",
+            "description": "Request body for scheduling a message. `text` is mandatory. Either `schedule_time` or `schedule_status` must be provided. `schedule_timezone` is optional.\n"
+          }
+        },
+        "required": [
+          "path_variables",
+          "body"
+        ],
+        "title": "ZohoCliq_Send_a_scheduled_messageSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoMail_sendEmail",
+      "description": "This API is used to send an email.",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "accountId": {
+                "description": "This key is used to identify the account from which the folders have to be fetched. It is generated during account addition.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountId"
+            ]
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "scheduleTime": {
+                "description": "Specify the date and time you want to schedule your email. This parameter is mandatory if scheduleType is set to value 6. Format:- MM/DD/YYYY HH:MM:SS. For example:- 09/15/2023 14:30:28",
+                "type": "string"
+              },
+              "attachments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "attachmentName": {
+                      "description": "Specifies the name of the attachment. This parameter can be fetched from Upload Attachments API.",
+                      "type": "string"
+                    },
+                    "storeName": {
+                      "description": "Specifies the name of the store where the attachment is saved. This parameter can be fetched from Upload Attachments API.",
+                      "type": "string"
+                    },
+                    "attachmentPath": {
+                      "description": "Specifies the path in which the attachment is stored. This parameter can be fetched from Upload Attachments API.",
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "subject": {
+                "description": "Provide the subject of the email.",
+                "type": "string"
+              },
+              "timeZone": {
+                "description": "Specify the timezone to schedule your email. This parameter is mandatory if scheduleType is set to value 6. For example:- GMT 5.30 (India Standard Time - Asia/Calcutta).",
+                "type": "string"
+              },
+              "bccAddress": {
+                "description": "Provide the recipient's email address for the Bcc field. Allowed values:- Valid recipient email address for the Bcc field.",
+                "type": "string"
+              },
+              "encoding": {
+                "default": "UTF-8",
+                "description": "Specifies the encoding that is to be used in the email content. Allowed values:- Big5, EUC-JP, EUC-KR, GB2312, ISO-2022-JP, ISO-8859-1, KOI8-R, Shift_JIS, US-ASCII, UTF-8, WINDOWS-1251, X-WINDOWS-ISO2022JP. The default value is UTF-8.",
+                "type": "string",
+                "enum": [
+                  "Big5",
+                  "EUC-JP",
+                  "EUC-KR",
+                  "GB2312",
+                  "ISO-2022-JP",
+                  "ISO-8859-1",
+                  "KOI8-R",
+                  "Shift_JIS",
+                  "US-ASCII",
+                  "UTF-8",
+                  "WINDOWS-1251",
+                  "X-WINDOWS-ISO2022JP"
+                ]
+              },
+              "toAddress": {
+                "description": "Provide the recipient's email address. Allowed values:- Valid recipient email address for the To field.",
+                "type": "string"
+              },
+              "content": {
+                "description": "Provide the content of the email.",
+                "type": "string"
+              },
+              "ccAddress": {
+                "description": "Provide the recipient's email address for the Cc field. Allowed values:- Valid recipient email address for the Cc field.",
+                "type": "string"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "draft",
+                  "template"
+                ]
+              },
+              "scheduleType": {
+                "description": "Specifies the type of scheduling. Allowed values:- 1 - Schedules email to be sent after one hour from the time of the request. 2 - Schedules email to be sent after two hours from the time of the request. 3 - Schedules email to be sent after four hours from the time of the request. 4 - Schedules email to be sent by the morning of the next day from the time of the request. 5 - Schedules email to be sent by the afternoon of the next day from the time of the request. 6 - Schedules email to be sent on the custom date and time of your choice.",
+                "type": "integer",
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6
+                ]
+              },
+              "askReceipt": {
+                "description": "Specifies whether Read receipt from the recipient is requested or not. Allowed values:- yes - Requesting a read receipt. no - Not requesting a read receipt",
+                "type": "string",
+                "enum": [
+                  "yes",
+                  "no"
+                ]
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "reply"
+                ]
+              },
+              "fromAddress": {
+                "description": "Provide the sender's email address (associated to the authenticated account). Allowed values:- Valid email address corresponding to the authenticated account for the From field.",
+                "type": "string"
+              },
+              "mailFormat": {
+                "default": "html",
+                "description": "Specify the format in which the mail needs to be sent. The value can be html or plaintext. The default value is html.",
+                "type": "string",
+                "enum": [
+                  "html",
+                  "plaintext"
+                ]
+              },
+              "isSchedule": {
+                "description": "Depending on whether the mail has to be scheduled or not, the value can be true - if the email should be scheduled. false - if the email should be sent immediately.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "fromAddress",
+              "toAddress"
+            ]
+          }
+        },
+        "required": [
+          "body",
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoMail_sendEmail_bodySchema": {
+            "properties": {
+              "scheduleTime": {
+                "default": null,
+                "description": "Specify the date and time you want to schedule your email. This parameter is mandatory if scheduleType is set to value 6. Format:- MM/DD/YYYY HH:MM:SS. For example:- 09/15/2023 14:30:28",
+                "title": "Scheduletime",
+                "type": "string"
+              },
+              "attachments": {
+                "default": null,
+                "description": "",
+                "items": {
+                  "$ref": "#/$defs/ZohoMail_sendEmail_body_attachments_ItemSchema"
+                },
+                "title": "Attachments",
+                "type": "array"
+              },
+              "subject": {
+                "default": null,
+                "description": "Provide the subject of the email.",
+                "title": "Subject",
+                "type": "string"
+              },
+              "timeZone": {
+                "default": null,
+                "description": "Specify the timezone to schedule your email. This parameter is mandatory if scheduleType is set to value 6. For example:- GMT 5.30 (India Standard Time - Asia/Calcutta).",
+                "title": "Timezone",
+                "type": "string"
+              },
+              "bccAddress": {
+                "default": null,
+                "description": "Provide the recipient's email address for the Bcc field. Allowed values:- Valid recipient email address for the Bcc field.",
+                "title": "Bccaddress",
+                "type": "string"
+              },
+              "encoding": {
+                "default": null,
+                "description": "Specifies the encoding that is to be used in the email content. Allowed values:- Big5, EUC-JP, EUC-KR, GB2312, ISO-2022-JP, ISO-8859-1, KOI8-R, Shift_JIS, US-ASCII, UTF-8, WINDOWS-1251, X-WINDOWS-ISO2022JP. The default value is UTF-8.",
+                "title": "Encoding",
+                "type": "string"
+              },
+              "toAddress": {
+                "description": "Provide the recipient's email address. Allowed values:- Valid recipient email address for the To field.",
+                "title": "Toaddress",
+                "type": "string"
+              },
+              "content": {
+                "default": null,
+                "description": "Provide the content of the email.",
+                "title": "Content",
+                "type": "string"
+              },
+              "ccAddress": {
+                "default": null,
+                "description": "Provide the recipient's email address for the Cc field. Allowed values:- Valid recipient email address for the Cc field.",
+                "title": "Ccaddress",
+                "type": "string"
+              },
+              "mode": {
+                "default": null,
+                "description": "",
+                "title": "Mode",
+                "type": "string"
+              },
+              "scheduleType": {
+                "default": null,
+                "description": "Specifies the type of scheduling. Allowed values:- 1 - Schedules email to be sent after one hour from the time of the request. 2 - Schedules email to be sent after two hours from the time of the request. 3 - Schedules email to be sent after four hours from the time of the request. 4 - Schedules email to be sent by the morning of the next day from the time of the request. 5 - Schedules email to be sent by the afternoon of the next day from the time of the request. 6 - Schedules email to be sent on the custom date and time of your choice.",
+                "title": "Scheduletype",
+                "type": "integer"
+              },
+              "askReceipt": {
+                "default": null,
+                "description": "Specifies whether Read receipt from the recipient is requested or not. Allowed values:- yes - Requesting a read receipt. no - Not requesting a read receipt",
+                "title": "Askreceipt",
+                "type": "string"
+              },
+              "action": {
+                "default": null,
+                "description": "",
+                "title": "Action",
+                "type": "string"
+              },
+              "fromAddress": {
+                "description": "Provide the sender's email address (associated to the authenticated account). Allowed values:- Valid email address corresponding to the authenticated account for the From field.",
+                "title": "Fromaddress",
+                "type": "string"
+              },
+              "mailFormat": {
+                "default": null,
+                "description": "Specify the format in which the mail needs to be sent. The value can be html or plaintext. The default value is html.",
+                "title": "Mailformat",
+                "type": "string"
+              },
+              "isSchedule": {
+                "default": null,
+                "description": "Depending on whether the mail has to be scheduled or not, the value can be true - if the email should be scheduled. false - if the email should be sent immediately.",
+                "title": "Isschedule",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "toAddress",
+              "fromAddress"
+            ],
+            "title": "ZohoMail_sendEmail_bodySchema",
+            "type": "object"
+          },
+          "ZohoMail_sendEmail_body_attachments_ItemSchema": {
+            "properties": {
+              "attachmentName": {
+                "default": null,
+                "description": "Specifies the name of the attachment. This parameter can be fetched from Upload Attachments API.",
+                "title": "Attachmentname",
+                "type": "string"
+              },
+              "storeName": {
+                "default": null,
+                "description": "Specifies the name of the store where the attachment is saved. This parameter can be fetched from Upload Attachments API.",
+                "title": "Storename",
+                "type": "string"
+              },
+              "attachmentPath": {
+                "default": null,
+                "description": "Specifies the path in which the attachment is stored. This parameter can be fetched from Upload Attachments API.",
+                "title": "Attachmentpath",
+                "type": "string"
+              }
+            },
+            "title": "ZohoMail_sendEmail_body_attachments_ItemSchema",
+            "type": "object"
+          },
+          "ZohoMail_sendEmail_path_variablesSchema": {
+            "properties": {
+              "accountId": {
+                "description": "This key is used to identify the account from which the folders have to be fetched. It is generated during account addition.",
+                "title": "Accountid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountId"
+            ],
+            "title": "ZohoMail_sendEmail_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoMail_sendEmail_path_variablesSchema",
+            "description": ""
+          },
+          "body": {
+            "$ref": "#/$defs/ZohoMail_sendEmail_bodySchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables",
+          "body"
+        ],
+        "title": "ZohoMail_sendEmailSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Department_Members",
+      "description": "Use this API to get the list of all the department members.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "DEPARTMENT_ID": {
+                "description": "Unique identifier for the department from which the list of members should be retrieved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "DEPARTMENT_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_Department_Members_path_variablesSchema": {
+            "properties": {
+              "DEPARTMENT_ID": {
+                "description": "Unique identifier for the department from which the list of members should be retrieved.",
+                "title": "Department Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "DEPARTMENT_ID"
+            ],
+            "title": "ZohoCliq_Get_Department_Members_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_Department_Members_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_Department_MembersSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Trigger_Remote_Check_in",
+      "description": "Use this API to check in remotely.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "processed_schema": {
+        "properties": {},
+        "title": "ZohoCliq_Trigger_Remote_Check_inSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Department_Details",
+      "description": "Use this API to get details of a department.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "DEPARTMENT_ID": {
+                "description": "Unique identifier of the department.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "DEPARTMENT_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_Department_Details_path_variablesSchema": {
+            "properties": {
+              "DEPARTMENT_ID": {
+                "description": "Unique identifier of the department.",
+                "title": "Department Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "DEPARTMENT_ID"
+            ],
+            "title": "ZohoCliq_Get_Department_Details_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_Department_Details_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_Department_DetailsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Channel_Members",
+      "description": "Use this API to get the list of all members in a channel.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "CHANNEL_ID": {
+                "description": "The ID of the channel for which members need to be retrieved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHANNEL_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_Channel_Members_path_variablesSchema": {
+            "properties": {
+              "CHANNEL_ID": {
+                "description": "The ID of the channel for which members need to be retrieved.",
+                "title": "Channel Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHANNEL_ID"
+            ],
+            "title": "ZohoCliq_Get_Channel_Members_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_Channel_Members_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_Channel_MembersSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Designation_Details",
+      "description": "Use this API to get details of a designation.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "DEPARTMENT_ID": {
+                "description": "Unique identifier of the department.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "DEPARTMENT_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_Designation_Details_path_variablesSchema": {
+            "properties": {
+              "DEPARTMENT_ID": {
+                "description": "Unique identifier of the department.",
+                "title": "Department Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "DEPARTMENT_ID"
+            ],
+            "title": "ZohoCliq_Get_Designation_Details_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_Designation_Details_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_Designation_DetailsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Designation_Members",
+      "description": "Use this API to get members who are associated with a designation.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "limit": {
+                "description": "Define the maximum number of members to be fetched in one request.",
+                "type": "string",
+                "maxLength": 100
+              },
+              "next_token": {
+                "description": "Use this parameter to fetch the next set of designations.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "limit"
+            ]
+          },
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "DESIGNATION_ID": {
+                "description": "Unique identifier of the designation",
+                "type": "string"
+              }
+            },
+            "required": [
+              "DESIGNATION_ID"
+            ]
+          }
+        },
+        "required": [
+          "query_params",
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_Designation_Members_path_variablesSchema": {
+            "properties": {
+              "DESIGNATION_ID": {
+                "description": "Unique identifier of the designation",
+                "title": "Designation Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "DESIGNATION_ID"
+            ],
+            "title": "ZohoCliq_Get_Designation_Members_path_variablesSchema",
+            "type": "object"
+          },
+          "ZohoCliq_Get_Designation_Members_query_paramsSchema": {
+            "properties": {
+              "limit": {
+                "description": "Define the maximum number of members to be fetched in one request.",
+                "title": "Limit",
+                "type": "string"
+              },
+              "next_token": {
+                "default": null,
+                "description": "Use this parameter to fetch the next set of designations.",
+                "title": "Next Token",
+                "type": "string"
+              }
+            },
+            "required": [
+              "limit"
+            ],
+            "title": "ZohoCliq_Get_Designation_Members_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_Get_Designation_Members_query_paramsSchema",
+            "description": ""
+          },
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_Designation_Members_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "query_params",
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_Designation_MembersSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Event_Details",
+      "description": "Use this API to get the event details of a specific event from the user's calendar.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "calendar_id": {
+                "description": "To retrieve the details of an event from a specific calendar using its calendar UID (Calendar unique identifier).",
+                "type": "string"
+              },
+              "recurrence_id": {
+                "description": "To retrieve the details of a specific occurrence of a recurring event.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "calendar_id"
+            ]
+          },
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "EVENT_ID": {
+                "description": "To retrieve the details of a specific event using its unique identifier.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "EVENT_ID"
+            ]
+          }
+        },
+        "required": [
+          "query_params",
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_Event_Details_path_variablesSchema": {
+            "properties": {
+              "EVENT_ID": {
+                "description": "To retrieve the details of a specific event using its unique identifier.",
+                "title": "Event Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "EVENT_ID"
+            ],
+            "title": "ZohoCliq_Get_Event_Details_path_variablesSchema",
+            "type": "object"
+          },
+          "ZohoCliq_Get_Event_Details_query_paramsSchema": {
+            "properties": {
+              "calendar_id": {
+                "description": "To retrieve the details of an event from a specific calendar using its calendar UID (Calendar unique identifier).",
+                "title": "Calendar Id",
+                "type": "string"
+              },
+              "recurrence_id": {
+                "default": null,
+                "description": "To retrieve the details of a specific occurrence of a recurring event.",
+                "title": "Recurrence Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "calendar_id"
+            ],
+            "title": "ZohoCliq_Get_Event_Details_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_Get_Event_Details_query_paramsSchema",
+            "description": ""
+          },
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_Event_Details_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "query_params",
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_Event_DetailsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Events",
+      "description": "Use this API to get the list of all your events scheduled within the next 31 days.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "search": {
+                "description": "A keyword or phrase used to filter events based on search text. Matches are performed on the titles of events.",
+                "type": "string"
+              },
+              "from": {
+                "description": "The start of the time interval from when you want to retrieve the events. From time should be passed in milliseconds.",
+                "type": "integer"
+              },
+              "include_hidden_calendars": {
+                "description": "Choose whether to display events from hidden calendars or not.",
+                "type": "boolean"
+              },
+              "ignore_declined_events": {
+                "description": "Choose whether to ignore declined events or not.",
+                "type": "boolean"
+              },
+              "to": {
+                "description": "The end of the time interval from when you want to retrieve the events. To time should be passed in milliseconds.",
+                "type": "integer"
+              },
+              "include_disabled_calendar": {
+                "description": "Choose whether to display events from disabled calendars or not.",
+                "type": "boolean"
+              }
+            },
+            "required": []
+          }
+        },
+        "required": []
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_Events_query_paramsSchema": {
+            "properties": {
+              "search": {
+                "default": null,
+                "description": "A keyword or phrase used to filter events based on search text. Matches are performed on the titles of events.",
+                "title": "Search",
+                "type": "string"
+              },
+              "from": {
+                "default": null,
+                "description": "The start of the time interval from when you want to retrieve the events. From time should be passed in milliseconds.",
+                "title": "From",
+                "type": "integer"
+              },
+              "include_hidden_calendars": {
+                "default": null,
+                "description": "Choose whether to display events from hidden calendars or not.",
+                "title": "Include Hidden Calendars",
+                "type": "boolean"
+              },
+              "ignore_declined_events": {
+                "default": null,
+                "description": "Choose whether to ignore declined events or not.",
+                "title": "Ignore Declined Events",
+                "type": "boolean"
+              },
+              "to": {
+                "default": null,
+                "description": "The end of the time interval from when you want to retrieve the events. To time should be passed in milliseconds.",
+                "title": "To",
+                "type": "integer"
+              },
+              "include_disabled_calendar": {
+                "default": null,
+                "description": "Choose whether to display events from disabled calendars or not.",
+                "title": "Include Disabled Calendar",
+                "type": "boolean"
+              }
+            },
+            "title": "ZohoCliq_Get_Events_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_Get_Events_query_paramsSchema",
+            "default": null,
+            "description": ""
+          }
+        },
+        "title": "ZohoCliq_Get_EventsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Files",
+      "description": "Get files from any chat, channel or bot which you are a part of using its file ID.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "FILE_ID": {
+                "description": "The unique identifier of the file.\nNote : You can retrieve the file id using the - Get messages endpoint.\n",
+                "type": "string"
+              }
+            },
+            "required": [
+              "FILE_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_Files_path_variablesSchema": {
+            "properties": {
+              "FILE_ID": {
+                "description": "The unique identifier of the file.\nNote : You can retrieve the file id using the - Get messages endpoint.\n",
+                "title": "File Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "FILE_ID"
+            ],
+            "title": "ZohoCliq_Get_Files_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_Files_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_FilesSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_main_message_of_a_thread",
+      "description": "Use this API to retrieve the main message from which the thread was created.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "THREAD_CHAT_ID": {
+                "description": "The CHAT_ID of the thread whose main (original) message is to be retrieved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "THREAD_CHAT_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_main_message_of_a_thread_path_variablesSchema": {
+            "properties": {
+              "THREAD_CHAT_ID": {
+                "description": "The CHAT_ID of the thread whose main (original) message is to be retrieved.",
+                "title": "Thread Chat Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "THREAD_CHAT_ID"
+            ],
+            "title": "ZohoCliq_Get_main_message_of_a_thread_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_main_message_of_a_thread_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_main_message_of_a_threadSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Messages",
+      "description": "Retrieves messages from a chat conversation that the user has access to.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "limit": {
+                "default": 100,
+                "description": "The number of messages to be retrieved. If limit is not specified, maximum of 100 messages will be retrieved.",
+                "type": "integer"
+              },
+              "fromtime": {
+                "format": "int64",
+                "description": "Time from when you want to retrieve messages from the chat. From time should be passed in milliseconds.",
+                "type": "integer"
+              },
+              "totime": {
+                "format": "int64",
+                "description": "Time till when you want to retrieve messages from the chat. To time should be passed in milliseconds.",
+                "type": "integer"
+              }
+            },
+            "required": []
+          },
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "CHAT_ID": {
+                "description": "The ID of the chat from which messages are retrieved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHAT_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_Messages_path_variablesSchema": {
+            "properties": {
+              "CHAT_ID": {
+                "description": "The ID of the chat from which messages are retrieved.",
+                "title": "Chat Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHAT_ID"
+            ],
+            "title": "ZohoCliq_Get_Messages_path_variablesSchema",
+            "type": "object"
+          },
+          "ZohoCliq_Get_Messages_query_paramsSchema": {
+            "properties": {
+              "limit": {
+                "default": null,
+                "description": "The number of messages to be retrieved. If limit is not specified, maximum of 100 messages will be retrieved.",
+                "title": "Limit",
+                "type": "integer"
+              },
+              "fromtime": {
+                "default": null,
+                "description": "Time from when you want to retrieve messages from the chat. From time should be passed in milliseconds.",
+                "title": "Fromtime",
+                "type": "integer"
+              },
+              "totime": {
+                "default": null,
+                "description": "Time till when you want to retrieve messages from the chat. To time should be passed in milliseconds.",
+                "title": "Totime",
+                "type": "integer"
+              }
+            },
+            "title": "ZohoCliq_Get_Messages_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_Get_Messages_query_paramsSchema",
+            "default": null,
+            "description": ""
+          },
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_Messages_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_MessagesSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_non-followers_of_a_thread",
+      "description": "Use this API to retrieve the list of channel members who are not currently following the specified thread.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "THREAD_CHAT_ID": {
+                "description": "Chat ID of the thread for which the list of non-followers needs to be retrieved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "THREAD_CHAT_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_non-followers_of_a_thread_path_variablesSchema": {
+            "properties": {
+              "THREAD_CHAT_ID": {
+                "description": "Chat ID of the thread for which the list of non-followers needs to be retrieved.",
+                "title": "Thread Chat Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "THREAD_CHAT_ID"
+            ],
+            "title": "ZohoCliq_Get_non-followers_of_a_thread_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_non-followers_of_a_thread_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_non-followers_of_a_threadSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Participants_of_a_call_or_meeting",
+      "description": "Use this API to get all the participants in a call or a meeting\nThe header X-API-VERSION 1 must be passed to support the use of query params. Users can get the call ID from the nrs_id key in the AV_History API.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "filter": {
+                "description": "Use this parameter to fetch the list of active and inactive users in the call.\nAllowed values:\n  - live: Current live users\n  - invited: Users invited but yet to join\n  - joined: Users who joined and left the call\n",
+                "type": "string"
+              },
+              "limit": {
+                "description": "Use this parameter to specifiy the number of participants retrieved per API call.",
+                "type": "integer"
+              },
+              "from": {
+                "description": "Use this parameter to fetch participants from the specified time.",
+                "type": "string"
+              },
+              "to": {
+                "description": "Use this parameter to fetch participants till the specified time.",
+                "type": "string"
+              },
+              "next_token": {
+                "description": "Token to get the next set of participants.",
+                "type": "string"
+              }
+            },
+            "required": []
+          }
+        },
+        "required": []
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_Participants_of_a_call_or_meeting_query_paramsSchema": {
+            "properties": {
+              "filter": {
+                "default": null,
+                "description": "Use this parameter to fetch the list of active and inactive users in the call.\nAllowed values:\n  - live: Current live users\n  - invited: Users invited but yet to join\n  - joined: Users who joined and left the call\n",
+                "title": "Filter",
+                "type": "string"
+              },
+              "limit": {
+                "default": null,
+                "description": "Use this parameter to specifiy the number of participants retrieved per API call.",
+                "title": "Limit",
+                "type": "integer"
+              },
+              "from": {
+                "default": null,
+                "description": "Use this parameter to fetch participants from the specified time.",
+                "title": "From",
+                "type": "string"
+              },
+              "to": {
+                "default": null,
+                "description": "Use this parameter to fetch participants till the specified time.",
+                "title": "To",
+                "type": "string"
+              },
+              "next_token": {
+                "default": null,
+                "description": "Token to get the next set of participants.",
+                "title": "Next Token",
+                "type": "string"
+              }
+            },
+            "title": "ZohoCliq_Get_Participants_of_a_call_or_meeting_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_Get_Participants_of_a_call_or_meeting_query_paramsSchema",
+            "default": null,
+            "description": ""
+          }
+        },
+        "title": "ZohoCliq_Get_Participants_of_a_call_or_meetingSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Reactions",
+      "description": "Use this API to retrieve details for all reactions to a specific message.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "MESSAGE_ID": {
+                "description": "The ID of the message for which reactions are to be fetched.",
+                "type": "string"
+              },
+              "CHAT_ID": {
+                "description": "The ID of the chat containing the message.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHAT_ID",
+              "MESSAGE_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_Reactions_path_variablesSchema": {
+            "properties": {
+              "MESSAGE_ID": {
+                "description": "The ID of the message for which reactions are to be fetched.",
+                "title": "Message Id",
+                "type": "string"
+              },
+              "CHAT_ID": {
+                "description": "The ID of the chat containing the message.",
+                "title": "Chat Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "MESSAGE_ID",
+              "CHAT_ID"
+            ],
+            "title": "ZohoCliq_Get_Reactions_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_Reactions_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_ReactionsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_permissions_of_a_role",
+      "description": "Use this API to get the permissions of a role in your organization.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "PROFILE_ID": {
+                "description": "Unique identifier of the role for which permission details need to be retrieved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "PROFILE_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_permissions_of_a_role_path_variablesSchema": {
+            "properties": {
+              "PROFILE_ID": {
+                "description": "Unique identifier of the role for which permission details need to be retrieved.",
+                "title": "Profile Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "PROFILE_ID"
+            ],
+            "title": "ZohoCliq_Get_permissions_of_a_role_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_permissions_of_a_role_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_permissions_of_a_roleSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Roles",
+      "description": "Use this API to fetch all available roles in your organization\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "processed_schema": {
+        "properties": {},
+        "title": "ZohoCliq_Get_RolesSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_remote_status",
+      "description": "Use this API to get your remote status.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "processed_schema": {
+        "properties": {},
+        "title": "ZohoCliq_Get_remote_statusSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Team_Members",
+      "description": "Use this API to retrieve a complete list of all members within a team.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "TEAM_ID": {
+                "description": "The unique ID of the team whose member list needs to be retrieved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "TEAM_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_Team_Members_path_variablesSchema": {
+            "properties": {
+              "TEAM_ID": {
+                "description": "The unique ID of the team whose member list needs to be retrieved.",
+                "title": "Team Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "TEAM_ID"
+            ],
+            "title": "ZohoCliq_Get_Team_Members_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_Team_Members_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_Team_MembersSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_the_list_of_all_reminders",
+      "description": "Use this API to retrieve details for all reminders. If no specific category is indicated, the API will return a list of reminders under the default category \"mine.\" By default, the API provides a list of 20 reminders.\nnext_set_token: This token will be issued in two scenarios:\n  If no limit is specified and there are more than 20 reminders in your list.\n  If you set a limit on the number of reminders to be retrieved, the token will be provided to access the next set of reminders. Please note that the token will be given only if the total number of reminders exceeds the limit you specified.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "next_set_token": {
+                "description": "Specify this token to fetch the next set of reminders.",
+                "type": "string"
+              },
+              "limit": {
+                "description": "Specify the number of reminders to be retrieved.",
+                "type": "number"
+              },
+              "category": {
+                "description": "Retrieves reminders from the specified category.\n\nmine: Active reminders assigned to or created by the user (default).\nmine-completed: Completed reminders assigned to or created by the user.\nothers: Active reminders created by the user for others (users or chats).\nothers-completed: Completed reminders created by the user for others.\n",
+                "type": "string"
+              }
+            },
+            "required": []
+          }
+        },
+        "required": []
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_the_list_of_all_reminders_query_paramsSchema": {
+            "properties": {
+              "next_set_token": {
+                "default": null,
+                "description": "Specify this token to fetch the next set of reminders.",
+                "title": "Next Set Token",
+                "type": "string"
+              },
+              "limit": {
+                "default": null,
+                "description": "Specify the number of reminders to be retrieved.",
+                "title": "Limit",
+                "type": "number"
+              },
+              "category": {
+                "default": null,
+                "description": "Retrieves reminders from the specified category.\n\nmine: Active reminders assigned to or created by the user (default).\nmine-completed: Completed reminders assigned to or created by the user.\nothers: Active reminders created by the user for others (users or chats).\nothers-completed: Completed reminders created by the user for others.\n",
+                "title": "Category",
+                "type": "string"
+              }
+            },
+            "title": "ZohoCliq_Get_the_list_of_all_reminders_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_Get_the_list_of_all_reminders_query_paramsSchema",
+            "default": null,
+            "description": ""
+          }
+        },
+        "title": "ZohoCliq_Get_the_list_of_all_remindersSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_threads_of_a_channel",
+      "description": "Use this API to retrieve all the threads in a chat.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "description": "Determines the follow status of the threads to be retrieved.\nAllowed values:\nfollowed - Returns only the threads the user is following. not_followed - Returns only the threads the user is not following. all - Returns all threads, regardless of follow status.\nIf the state parameter is not specified, the default value will be all.\n",
+                "type": "string"
+              },
+              "type": {
+                "description": "Filters threads based on their current status.\nAllowed values:\nopen - Returns threads that are currently active or ongoing. closed - Returns threads that have been marked as closed or resolved.\nIf a type parameter is not specified, all threads in the parent chat will be returned.\n",
+                "type": "string"
+              }
+            },
+            "required": []
+          },
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "CHANNEL_ID": {
+                "description": "Channel ID from which the threads need to be retrieved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHANNEL_ID"
+            ]
+          },
+          "body": {
+            "description": "Request parameters to retrieve threads from a channel.",
+            "type": "object",
+            "properties": {
+              "limit": {
+                "description": "Maximum number of threads to return in the response.",
+                "type": "string"
+              },
+              "next_token": {
+                "description": "Used for pagination. Pass the next_token received in the previous API response to get the next page.",
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "body",
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_threads_of_a_channel_bodySchema": {
+            "properties": {
+              "limit": {
+                "default": null,
+                "description": "Maximum number of threads to return in the response.",
+                "title": "Limit",
+                "type": "string"
+              },
+              "next_token": {
+                "default": null,
+                "description": "Used for pagination. Pass the next_token received in the previous API response to get the next page.",
+                "title": "Next Token",
+                "type": "string"
+              }
+            },
+            "title": "ZohoCliq_Get_threads_of_a_channel_bodySchema",
+            "type": "object"
+          },
+          "ZohoCliq_Get_threads_of_a_channel_path_variablesSchema": {
+            "properties": {
+              "CHANNEL_ID": {
+                "description": "Channel ID from which the threads need to be retrieved.",
+                "title": "Channel Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHANNEL_ID"
+            ],
+            "title": "ZohoCliq_Get_threads_of_a_channel_path_variablesSchema",
+            "type": "object"
+          },
+          "ZohoCliq_Get_threads_of_a_channel_query_paramsSchema": {
+            "properties": {
+              "state": {
+                "default": null,
+                "description": "Determines the follow status of the threads to be retrieved.\nAllowed values:\nfollowed - Returns only the threads the user is following. not_followed - Returns only the threads the user is not following. all - Returns all threads, regardless of follow status.\nIf the state parameter is not specified, the default value will be all.\n",
+                "title": "State",
+                "type": "string"
+              },
+              "type": {
+                "default": null,
+                "description": "Filters threads based on their current status.\nAllowed values:\nopen - Returns threads that are currently active or ongoing. closed - Returns threads that have been marked as closed or resolved.\nIf a type parameter is not specified, all threads in the parent chat will be returned.\n",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "title": "ZohoCliq_Get_threads_of_a_channel_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_Get_threads_of_a_channel_query_paramsSchema",
+            "default": null,
+            "description": ""
+          },
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_threads_of_a_channel_path_variablesSchema",
+            "description": ""
+          },
+          "body": {
+            "$ref": "#/$defs/ZohoCliq_Get_threads_of_a_channel_bodySchema",
+            "description": "Request parameters to retrieve threads from a channel."
+          }
+        },
+        "required": [
+          "path_variables",
+          "body"
+        ],
+        "title": "ZohoCliq_Get_threads_of_a_channelSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_thread_followers",
+      "description": "Use this API to get the followers of the thread.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "THREAD_CHAT_ID": {
+                "description": "Chat ID of the thread for which the list of followers needs to be retrieved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "THREAD_CHAT_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_thread_followers_path_variablesSchema": {
+            "properties": {
+              "THREAD_CHAT_ID": {
+                "description": "Chat ID of the thread for which the list of followers needs to be retrieved.",
+                "title": "Thread Chat Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "THREAD_CHAT_ID"
+            ],
+            "title": "ZohoCliq_Get_thread_followers_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Get_thread_followers_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Get_thread_followersSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_Calendars",
+      "description": "Use this API to retrieve a comprehensive list of all calendars associated with a user.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "include_hidden_calendars": {
+                "description": "Choose whether to display the hidden calendars or not.",
+                "type": "boolean"
+              }
+            },
+            "required": []
+          }
+        },
+        "required": []
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Get_Calendars_query_paramsSchema": {
+            "properties": {
+              "include_hidden_calendars": {
+                "default": null,
+                "description": "Choose whether to display the hidden calendars or not.",
+                "title": "Include Hidden Calendars",
+                "type": "boolean"
+              }
+            },
+            "title": "ZohoCliq_Get_Calendars_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_Get_Calendars_query_paramsSchema",
+            "default": null,
+            "description": ""
+          }
+        },
+        "title": "ZohoCliq_Get_CalendarsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Get_all_userfields",
+      "description": "Use this API to get the details of all userfields.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "processed_schema": {
+        "properties": {},
+        "title": "ZohoCliq_Get_all_userfieldsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_List_all_Departments",
+      "description": "Use this API to get the list of all departments in your organization.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "search": {
+                "description": "A string to search for departments by name.\n\n  Note: This param is mandatory if your Cliq organization is integrated with Zoho People.\n",
+                "type": "string"
+              },
+              "limit": {
+                "description": "The total number of departments to be fetched. If limit is not specified, a maximum of 25 departments will be returned for a request.\n",
+                "type": "string",
+                "maxLength": 25
+              },
+              "next_token": {
+                "description": "Use this parameter to fetch the next set of departments.\n",
+                "type": "string"
+              }
+            },
+            "required": []
+          }
+        },
+        "required": []
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_List_all_Departments_query_paramsSchema": {
+            "properties": {
+              "search": {
+                "default": null,
+                "description": "A string to search for departments by name.\n\n  Note: This param is mandatory if your Cliq organization is integrated with Zoho People.\n",
+                "title": "Search",
+                "type": "string"
+              },
+              "limit": {
+                "default": null,
+                "description": "The total number of departments to be fetched. If limit is not specified, a maximum of 25 departments will be returned for a request.\n",
+                "title": "Limit",
+                "type": "string"
+              },
+              "next_token": {
+                "default": null,
+                "description": "Use this parameter to fetch the next set of departments.\n",
+                "title": "Next Token",
+                "type": "string"
+              }
+            },
+            "title": "ZohoCliq_List_all_Departments_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_List_all_Departments_query_paramsSchema",
+            "default": null,
+            "description": ""
+          }
+        },
+        "title": "ZohoCliq_List_all_DepartmentsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Retrieve_all_direct_chats",
+      "description": "Use this API to get details of all direct chats.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "modified_before": {
+                "description": "Gets the list of chats where the last message is sent before the mentioned time.",
+                "type": "string"
+              },
+              "limit": {
+                "format": "int64",
+                "description": "The number of chats that has to be retrieved.Maximum limit : 100.",
+                "type": "integer"
+              },
+              "modified_after": {
+                "description": "Gets the list of chats where the last message is sent after the mentioned time.",
+                "type": "string"
+              },
+              "drafts": {
+                "description": "If drafts is set to true, it retrieves the list of chats that contain drafts.",
+                "type": "boolean"
+              }
+            },
+            "required": []
+          }
+        },
+        "required": []
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Retrieve_all_direct_chats_query_paramsSchema": {
+            "properties": {
+              "modified_before": {
+                "default": null,
+                "description": "Gets the list of chats where the last message is sent before the mentioned time.",
+                "title": "Modified Before",
+                "type": "string"
+              },
+              "limit": {
+                "default": null,
+                "description": "The number of chats that has to be retrieved.Maximum limit : 100.",
+                "title": "Limit",
+                "type": "integer"
+              },
+              "modified_after": {
+                "default": null,
+                "description": "Gets the list of chats where the last message is sent after the mentioned time.",
+                "title": "Modified After",
+                "type": "string"
+              },
+              "drafts": {
+                "default": null,
+                "description": "If drafts is set to true, it retrieves the list of chats that contain drafts.",
+                "title": "Drafts",
+                "type": "boolean"
+              }
+            },
+            "title": "ZohoCliq_Retrieve_all_direct_chats_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_Retrieve_all_direct_chats_query_paramsSchema",
+            "default": null,
+            "description": ""
+          }
+        },
+        "title": "ZohoCliq_Retrieve_all_direct_chatsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Retrieve_the_members_of_a_chat",
+      "description": "Use this API to get details of members of a chat.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "fields": {
+                "description": "Use this parameter to get details of members who are participating in a conversation.Allowed values: name | email_id | user_id",
+                "type": "string"
+              }
+            },
+            "required": []
+          },
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "CHAT_ID": {
+                "description": "The ID of the chat from which members need to be retrieved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHAT_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Retrieve_the_members_of_a_chat_path_variablesSchema": {
+            "properties": {
+              "CHAT_ID": {
+                "description": "The ID of the chat from which members need to be retrieved.",
+                "title": "Chat Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHAT_ID"
+            ],
+            "title": "ZohoCliq_Retrieve_the_members_of_a_chat_path_variablesSchema",
+            "type": "object"
+          },
+          "ZohoCliq_Retrieve_the_members_of_a_chat_query_paramsSchema": {
+            "properties": {
+              "fields": {
+                "default": null,
+                "description": "Use this parameter to get details of members who are participating in a conversation.Allowed values: name | email_id | user_id",
+                "title": "Fields",
+                "type": "string"
+              }
+            },
+            "title": "ZohoCliq_Retrieve_the_members_of_a_chat_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_Retrieve_the_members_of_a_chat_query_paramsSchema",
+            "default": null,
+            "description": ""
+          },
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Retrieve_the_members_of_a_chat_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Retrieve_the_members_of_a_chatSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Share_files_in_a_chat",
+      "description": "Share files in a chat using the Chat ID. The content of the file should be of type multipart/form-data\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "CHAT_ID": {
+                "description": "The unique identifier of the chat in which the attachment needs to be sent.\n",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHAT_ID"
+            ]
+          },
+          "body": {
+            "description": "Request body for sharing files to a chat or direct conversation.",
+            "type": "object",
+            "properties": {
+              "mark_as_read": {
+                "description": "Marks the shared file as read for the user. Defaults to unread.",
+                "type": "boolean"
+              },
+              "comments": {
+                "description": "List of comments corresponding to each file being shared.",
+                "type": "array",
+                "items": {
+                  "description": "A comment corresponding to a file.",
+                  "type": "string"
+                }
+              },
+              "bot_name": {
+                "description": "To share the file with a custom name displayed as the sender.",
+                "type": "string"
+              },
+              "files": {
+                "description": "The file(s) to be shared.\n- Maximum file size per file: 50 MB\n- Maximum number of files that can be shared at a time: 10\n",
+                "type": "array",
+                "items": {
+                  "format": "binary",
+                  "description": "The binary content of a file to be shared.",
+                  "type": "string"
+                }
+              },
+              "bot_image": {
+                "format": "uri",
+                "description": "The URL of the image to be used as the sender's avatar.",
+                "type": "string"
+              },
+              "bot_unique_name": {
+                "description": "Unique name of the bot to share the files as. The bot must already be a participant in the chat.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "files"
+            ]
+          }
+        },
+        "required": [
+          "body",
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Share_files_in_a_chat_bodySchema": {
+            "properties": {
+              "mark_as_read": {
+                "default": null,
+                "description": "Marks the shared file as read for the user. Defaults to unread.",
+                "title": "Mark As Read",
+                "type": "boolean"
+              },
+              "comments": {
+                "default": null,
+                "description": "List of comments corresponding to each file being shared.",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Comments",
+                "type": "array"
+              },
+              "bot_name": {
+                "default": null,
+                "description": "To share the file with a custom name displayed as the sender.",
+                "title": "Bot Name",
+                "type": "string"
+              },
+              "files": {
+                "description": "The file(s) to be shared.\n- Maximum file size per file: 50 MB\n- Maximum number of files that can be shared at a time: 10\n",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Files",
+                "type": "array"
+              },
+              "bot_image": {
+                "default": null,
+                "description": "The URL of the image to be used as the sender's avatar.",
+                "title": "Bot Image",
+                "type": "string"
+              },
+              "bot_unique_name": {
+                "default": null,
+                "description": "Unique name of the bot to share the files as. The bot must already be a participant in the chat.",
+                "title": "Bot Unique Name",
+                "type": "string"
+              }
+            },
+            "required": [
+              "files"
+            ],
+            "title": "ZohoCliq_Share_files_in_a_chat_bodySchema",
+            "type": "object"
+          },
+          "ZohoCliq_Share_files_in_a_chat_path_variablesSchema": {
+            "properties": {
+              "CHAT_ID": {
+                "description": "The unique identifier of the chat in which the attachment needs to be sent.\n",
+                "title": "Chat Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHAT_ID"
+            ],
+            "title": "ZohoCliq_Share_files_in_a_chat_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Share_files_in_a_chat_path_variablesSchema",
+            "description": ""
+          },
+          "body": {
+            "$ref": "#/$defs/ZohoCliq_Share_files_in_a_chat_bodySchema",
+            "description": "Request body for sharing files to a chat or direct conversation."
+          }
+        },
+        "required": [
+          "path_variables",
+          "body"
+        ],
+        "title": "ZohoCliq_Share_files_in_a_chatSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Post_message_in_chat",
+      "description": "To post message in a chat (or thread), the chat_id (thread_id in case of threads) can be used in the request URL.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "CHAT_ID": {
+                "description": "The ID of the chat where the message should be posted.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHAT_ID"
+            ]
+          },
+          "body": {
+            "description": "Request object to send a message in a chat.",
+            "type": "object",
+            "properties": {
+              "mark_as_read": {
+                "description": "Mark the message as read for the user.",
+                "type": "boolean"
+              },
+              "reply_to": {
+                "description": "Message ID to reply to in chat.",
+                "type": "string"
+              },
+              "sync_message": {
+                "description": "Post message in synchronous thread; returns message ID.",
+                "type": "boolean"
+              },
+              "text": {
+                "description": "Text content to send in chat. Maximum length: 5000.",
+                "type": "string",
+                "maxLength": 5000
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        },
+        "required": [
+          "body",
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Post_message_in_chat_bodySchema": {
+            "properties": {
+              "mark_as_read": {
+                "default": null,
+                "description": "Mark the message as read for the user.",
+                "title": "Mark As Read",
+                "type": "boolean"
+              },
+              "reply_to": {
+                "default": null,
+                "description": "Message ID to reply to in chat.",
+                "title": "Reply To",
+                "type": "string"
+              },
+              "sync_message": {
+                "default": null,
+                "description": "Post message in synchronous thread; returns message ID.",
+                "title": "Sync Message",
+                "type": "boolean"
+              },
+              "text": {
+                "description": "Text content to send in chat. Maximum length: 5000.",
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "title": "ZohoCliq_Post_message_in_chat_bodySchema",
+            "type": "object"
+          },
+          "ZohoCliq_Post_message_in_chat_path_variablesSchema": {
+            "properties": {
+              "CHAT_ID": {
+                "description": "The ID of the chat where the message should be posted.",
+                "title": "Chat Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "CHAT_ID"
+            ],
+            "title": "ZohoCliq_Post_message_in_chat_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Post_message_in_chat_path_variablesSchema",
+            "description": ""
+          },
+          "body": {
+            "$ref": "#/$defs/ZohoCliq_Post_message_in_chat_bodySchema",
+            "description": "Request object to send a message in a chat."
+          }
+        },
+        "required": [
+          "path_variables",
+          "body"
+        ],
+        "title": "ZohoCliq_Post_message_in_chatSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Fetch_list_of_user_teams",
+      "description": "Use  this API to fetch the list of teams that the user belongs to. Head on over here to know more about team object attributes.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "User ID": {
+                "description": "Unique identifier of the user whose team information need to be retrieved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "User ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Fetch_list_of_user_teams_path_variablesSchema": {
+            "properties": {
+              "User ID": {
+                "description": "Unique identifier of the user whose team information need to be retrieved.",
+                "title": "User Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "User ID"
+            ],
+            "title": "ZohoCliq_Fetch_list_of_user_teams_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Fetch_list_of_user_teams_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Fetch_list_of_user_teamsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_List_all_channels",
+      "description": "Retrieve a list of channels based on the given filters.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "channel_ids": {
+                "description": "The list of channel IDs for which details have to be retrieved. You can enter multiple fields separated by commas.",
+                "type": "string"
+              },
+              "chat_ids": {
+                "description": "Unique channel chat IDs for which details have to be retrieved. You can enter multiple fields separated by commas.",
+                "type": "string"
+              },
+              "pinned": {
+                "description": "When pinned = true, only pinned channels are retrieved.  \nWhen pinned = false, all channels are retrieved regardless of pin status.\n",
+                "type": "boolean"
+              },
+              "created_after": {
+                "format": "date-time",
+                "description": "The list of channels created after the specified time.",
+                "type": "string"
+              },
+              "level": {
+                "description": "Specifies the level to fetch channels of a particular type.\nAllowed values:\n  - organization: Public channel visible to everyone in the organization.\n  - team: Channel visible only to specific teams.\n  - private: Invitation-only channel with restricted access.\n  - external: Channel with participants outside the organization.\n",
+                "type": "string",
+                "enum": [
+                  "organization",
+                  "team",
+                  "private",
+                  "external"
+                ]
+              },
+              "team_ids": {
+                "description": "Gets the list of channels associated with the specified team IDs. You can enter multiple fields separated by commas.",
+                "type": "string"
+              },
+              "sync_token": {
+                "description": "Gets the list of recently updated channels after which the previous request was made.  \nNote: The sync_token will return an exception if the number of channels to be synced is greater than 50.\n",
+                "type": "string"
+              },
+              "joined": {
+                "description": "When joined = true, only the joined channels are fetched.  \nWhen joined = false, only the non-joined channels are fetched.  \nWhen not specified, all types of channels will be returned.\n",
+                "type": "boolean"
+              },
+              "modified_after": {
+                "format": "date-time",
+                "description": "Gets the list of channels where the last message is sent after the mentioned time.",
+                "type": "string"
+              },
+              "next_token": {
+                "description": "Use this parameter to fetch the next immediate list of channels.",
+                "type": "string"
+              },
+              "created_by": {
+                "description": "Gets the list of channels created by the mentioned email ID or user ID.",
+                "type": "string"
+              },
+              "created_before": {
+                "format": "date-time",
+                "description": "The list of channels created before the specified time.",
+                "type": "string"
+              },
+              "modified_before": {
+                "format": "date-time",
+                "description": "Gets the list of channels where the last message is sent before the mentioned time.",
+                "type": "string"
+              },
+              "name": {
+                "description": "Name of the channel to be retrieved.",
+                "type": "string"
+              },
+              "limit": {
+                "description": "The number of channels that has to be retrieved. Maximum limit will be 100.",
+                "maximum": 100,
+                "type": "integer"
+              },
+              "order_by": {
+                "description": "To sort the list of available channels in either ascending or descending order.\nAllowed values:\n  - +last_modified_time: Sort channels by last modified time in ascending order.\n  - -last_modified_time: Sort channels by last modified time in descending order.\n  - +creation_time: Sort channels by creation time in ascending order.\n  - -creation_time: Sort channels by creation time in descending order.\n",
+                "type": "string",
+                "enum": [
+                  "+last_modified_time",
+                  "-last_modified_time",
+                  "+creation_time",
+                  "-creation_time"
+                ]
+              },
+              "status": {
+                "description": "Status of the channel to be retrieved.\nAllowed values:\n  - created: Channels that are active and fully created.\n  - pending: Channels that are in the process of being created or awaiting confirmation.\n  - archived: Channels that are no longer active and have been archived.\n",
+                "type": "string",
+                "enum": [
+                  "created",
+                  "pending",
+                  "archived"
+                ]
+              }
+            },
+            "required": []
+          }
+        },
+        "required": []
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_List_all_channels_query_paramsSchema": {
+            "properties": {
+              "channel_ids": {
+                "default": null,
+                "description": "The list of channel IDs for which details have to be retrieved. You can enter multiple fields separated by commas.",
+                "title": "Channel Ids",
+                "type": "string"
+              },
+              "chat_ids": {
+                "default": null,
+                "description": "Unique channel chat IDs for which details have to be retrieved. You can enter multiple fields separated by commas.",
+                "title": "Chat Ids",
+                "type": "string"
+              },
+              "pinned": {
+                "default": null,
+                "description": "When pinned = true, only pinned channels are retrieved.  \nWhen pinned = false, all channels are retrieved regardless of pin status.\n",
+                "title": "Pinned",
+                "type": "boolean"
+              },
+              "created_after": {
+                "default": null,
+                "description": "The list of channels created after the specified time.",
+                "title": "Created After",
+                "type": "string"
+              },
+              "level": {
+                "default": null,
+                "description": "Specifies the level to fetch channels of a particular type.\nAllowed values:\n  - organization: Public channel visible to everyone in the organization.\n  - team: Channel visible only to specific teams.\n  - private: Invitation-only channel with restricted access.\n  - external: Channel with participants outside the organization.\n",
+                "title": "Level",
+                "type": "string"
+              },
+              "team_ids": {
+                "default": null,
+                "description": "Gets the list of channels associated with the specified team IDs. You can enter multiple fields separated by commas.",
+                "title": "Team Ids",
+                "type": "string"
+              },
+              "sync_token": {
+                "default": null,
+                "description": "Gets the list of recently updated channels after which the previous request was made.  \nNote: The sync_token will return an exception if the number of channels to be synced is greater than 50.\n",
+                "title": "Sync Token",
+                "type": "string"
+              },
+              "joined": {
+                "default": null,
+                "description": "When joined = true, only the joined channels are fetched.  \nWhen joined = false, only the non-joined channels are fetched.  \nWhen not specified, all types of channels will be returned.\n",
+                "title": "Joined",
+                "type": "boolean"
+              },
+              "modified_after": {
+                "default": null,
+                "description": "Gets the list of channels where the last message is sent after the mentioned time.",
+                "title": "Modified After",
+                "type": "string"
+              },
+              "next_token": {
+                "default": null,
+                "description": "Use this parameter to fetch the next immediate list of channels.",
+                "title": "Next Token",
+                "type": "string"
+              },
+              "created_by": {
+                "default": null,
+                "description": "Gets the list of channels created by the mentioned email ID or user ID.",
+                "title": "Created By",
+                "type": "string"
+              },
+              "created_before": {
+                "default": null,
+                "description": "The list of channels created before the specified time.",
+                "title": "Created Before",
+                "type": "string"
+              },
+              "modified_before": {
+                "default": null,
+                "description": "Gets the list of channels where the last message is sent before the mentioned time.",
+                "title": "Modified Before",
+                "type": "string"
+              },
+              "name": {
+                "default": null,
+                "description": "Name of the channel to be retrieved.",
+                "title": "Name",
+                "type": "string"
+              },
+              "limit": {
+                "default": null,
+                "description": "The number of channels that has to be retrieved. Maximum limit will be 100.",
+                "title": "Limit",
+                "type": "integer"
+              },
+              "order_by": {
+                "default": null,
+                "description": "To sort the list of available channels in either ascending or descending order.\nAllowed values:\n  - +last_modified_time: Sort channels by last modified time in ascending order.\n  - -last_modified_time: Sort channels by last modified time in descending order.\n  - +creation_time: Sort channels by creation time in ascending order.\n  - -creation_time: Sort channels by creation time in descending order.\n",
+                "title": "Order By",
+                "type": "string"
+              },
+              "status": {
+                "default": null,
+                "description": "Status of the channel to be retrieved.\nAllowed values:\n  - created: Channels that are active and fully created.\n  - pending: Channels that are in the process of being created or awaiting confirmation.\n  - archived: Channels that are no longer active and have been archived.\n",
+                "title": "Status",
+                "type": "string"
+              }
+            },
+            "title": "ZohoCliq_List_all_channels_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_List_all_channels_query_paramsSchema",
+            "default": null,
+            "description": ""
+          }
+        },
+        "title": "ZohoCliq_List_all_channelsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_List_all_Teams",
+      "description": "Use this to get the list of all teams.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "joined": {
+                "description": "If joined = true, then the response contains the list of teams containing the user as a member.",
+                "type": "string"
+              }
+            },
+            "required": []
+          }
+        },
+        "required": []
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_List_all_Teams_query_paramsSchema": {
+            "properties": {
+              "joined": {
+                "default": null,
+                "description": "If joined = true, then the response contains the list of teams containing the user as a member.",
+                "title": "Joined",
+                "type": "string"
+              }
+            },
+            "title": "ZohoCliq_List_all_Teams_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_List_all_Teams_query_paramsSchema",
+            "default": null,
+            "description": ""
+          }
+        },
+        "title": "ZohoCliq_List_all_TeamsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_List_records",
+      "description": "Use this API to get the list of all records in a specific database.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "query_params": {
+            "type": "object",
+            "properties": {
+              "from_index": {
+                "description": "This parameter fetches records starting from a particular index value.",
+                "type": "integer"
+              },
+              "start_token": {
+                "description": "This token is obtained in the response JSON when from_index and limit are specified. Use this parameter in the next request to retrieve the remaining records in the database.\n",
+                "type": "string"
+              },
+              "criteria": {
+                "description": "This parameter fetches records that meet the specified criteria expression.",
+                "type": "string"
+              },
+              "limit": {
+                "description": "Use this parameter to limit the number of records fetched from a particular index value.",
+                "type": "integer"
+              },
+              "order_by": {
+                "description": "Use this parameter to retrieve the list of records in ascending or descending order. Allowed values:\n\n  +column_name - Ascending order by the specified column.\n  -column_name - Descending order by the specified column.\n\nNote: Use %2B instead of + in URLs, as + is a reserved character.\n",
+                "type": "string"
+              }
+            },
+            "required": []
+          },
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "DATABASE_UNIQUE_NAME": {
+                "description": "The unique name of the database in which you'd like to fetch the records.\n",
+                "type": "string"
+              }
+            },
+            "required": [
+              "DATABASE_UNIQUE_NAME"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_List_records_path_variablesSchema": {
+            "properties": {
+              "DATABASE_UNIQUE_NAME": {
+                "description": "The unique name of the database in which you'd like to fetch the records.\n",
+                "title": "Database Unique Name",
+                "type": "string"
+              }
+            },
+            "required": [
+              "DATABASE_UNIQUE_NAME"
+            ],
+            "title": "ZohoCliq_List_records_path_variablesSchema",
+            "type": "object"
+          },
+          "ZohoCliq_List_records_query_paramsSchema": {
+            "properties": {
+              "from_index": {
+                "default": null,
+                "description": "This parameter fetches records starting from a particular index value.",
+                "title": "From Index",
+                "type": "integer"
+              },
+              "start_token": {
+                "default": null,
+                "description": "This token is obtained in the response JSON when from_index and limit are specified. Use this parameter in the next request to retrieve the remaining records in the database.\n",
+                "title": "Start Token",
+                "type": "string"
+              },
+              "criteria": {
+                "default": null,
+                "description": "This parameter fetches records that meet the specified criteria expression.",
+                "title": "Criteria",
+                "type": "string"
+              },
+              "limit": {
+                "default": null,
+                "description": "Use this parameter to limit the number of records fetched from a particular index value.",
+                "title": "Limit",
+                "type": "integer"
+              },
+              "order_by": {
+                "default": null,
+                "description": "Use this parameter to retrieve the list of records in ascending or descending order. Allowed values:\n\n  +column_name - Ascending order by the specified column.\n  -column_name - Descending order by the specified column.\n\nNote: Use %2B instead of + in URLs, as + is a reserved character.\n",
+                "title": "Order By",
+                "type": "string"
+              }
+            },
+            "title": "ZohoCliq_List_records_query_paramsSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "query_params": {
+            "$ref": "#/$defs/ZohoCliq_List_records_query_paramsSchema",
+            "default": null,
+            "description": ""
+          },
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_List_records_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_List_recordsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Retrieve_role_details",
+      "description": "Use this API to retrieve detailed information about a specific role.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "PROFILE_ID": {
+                "description": "Unique identifier of the role to be retrieved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "PROFILE_ID"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Retrieve_role_details_path_variablesSchema": {
+            "properties": {
+              "PROFILE_ID": {
+                "description": "Unique identifier of the role to be retrieved.",
+                "title": "Profile Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "PROFILE_ID"
+            ],
+            "title": "ZohoCliq_Retrieve_role_details_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Retrieve_role_details_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoCliq_Retrieve_role_detailsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoCliq_Update_user_details",
+      "description": "Use this API to edit or update a user's details.\n",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "User ID": {
+                "description": "Unique identifier of the user whose details needs to be updated.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "User ID"
+            ]
+          },
+          "body": {
+            "description": "Request body to create or update one or more users.",
+            "type": "object",
+            "properties": {
+              "users": {
+                "description": "Array of user objects to be created or updated.",
+                "type": "array",
+                "items": {
+                  "description": "User object to be created or updated",
+                  "type": "object",
+                  "properties": {
+                    "email_id": {
+                      "format": "email",
+                      "description": "The email ID of the user. (Mandatory)",
+                      "type": "string"
+                    },
+                    "channel_ids": {
+                      "description": "IDs of the channels the user will be added to.",
+                      "type": "array",
+                      "items": {
+                        "description": "A single channel ID",
+                        "type": "string"
+                      }
+                    },
+                    "country": {
+                      "description": "Country code of the user.",
+                      "type": "string"
+                    },
+                    "extension": {
+                      "description": "The user's extension/desk phone number.",
+                      "type": "string"
+                    },
+                    "department_id": {
+                      "description": "ID of the department where the user will be added.",
+                      "type": "string"
+                    },
+                    "timezone": {
+                      "description": "User's timezone.",
+                      "type": "string"
+                    },
+                    "team_ids": {
+                      "description": "IDs of the teams the user will be added to.",
+                      "type": "array",
+                      "items": {
+                        "description": "A single team ID",
+                        "type": "string"
+                      }
+                    },
+                    "designation_id": {
+                      "description": "ID of the designation to be associated with the user.",
+                      "type": "string"
+                    },
+                    "mobile": {
+                      "description": "Mobile number of the user.",
+                      "type": "string"
+                    },
+                    "last_name": {
+                      "description": "The last name of the user.",
+                      "type": "string"
+                    },
+                    "language": {
+                      "description": "User's default language.",
+                      "type": "string"
+                    },
+                    "display_name": {
+                      "description": "The display name of the user.",
+                      "type": "string"
+                    },
+                    "work_location": {
+                      "description": "Work location of the user.",
+                      "type": "string"
+                    },
+                    "phone": {
+                      "description": "Phone number of the user.",
+                      "type": "string"
+                    },
+                    "employee_id": {
+                      "description": "The user's employee ID.",
+                      "type": "string"
+                    },
+                    "image_data": {
+                      "format": "byte",
+                      "description": "The profile picture of the user in Base64 format.",
+                      "type": "string"
+                    },
+                    "Custom_Field_UniqueName": {
+                      "description": "Unique name of a custom user field.  \n- Note: This is not a static value and can change according to the user-defined field name.  \n- Example: For a custom user field \"Workplace Name\", provide its unique name `workplace_name`.\n",
+                      "type": "string"
+                    },
+                    "first_name": {
+                      "description": "The first name of the user.",
+                      "type": "string"
+                    },
+                    "reporting_to_zuid": {
+                      "description": "User ID of the reporting manager.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "email_id"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "body",
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoCliq_Update_user_details_bodySchema": {
+            "properties": {
+              "users": {
+                "default": null,
+                "description": "Array of user objects to be created or updated.",
+                "items": {
+                  "$ref": "#/$defs/ZohoCliq_Update_user_details_body_users_ItemSchema"
+                },
+                "title": "Users",
+                "type": "array"
+              }
+            },
+            "title": "ZohoCliq_Update_user_details_bodySchema",
+            "type": "object"
+          },
+          "ZohoCliq_Update_user_details_body_users_ItemSchema": {
+            "properties": {
+              "email_id": {
+                "description": "The email ID of the user. (Mandatory)",
+                "title": "Email Id",
+                "type": "string"
+              },
+              "channel_ids": {
+                "default": null,
+                "description": "IDs of the channels the user will be added to.",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Channel Ids",
+                "type": "array"
+              },
+              "country": {
+                "default": null,
+                "description": "Country code of the user.",
+                "title": "Country",
+                "type": "string"
+              },
+              "extension": {
+                "default": null,
+                "description": "The user's extension/desk phone number.",
+                "title": "Extension",
+                "type": "string"
+              },
+              "department_id": {
+                "default": null,
+                "description": "ID of the department where the user will be added.",
+                "title": "Department Id",
+                "type": "string"
+              },
+              "timezone": {
+                "default": null,
+                "description": "User's timezone.",
+                "title": "Timezone",
+                "type": "string"
+              },
+              "team_ids": {
+                "default": null,
+                "description": "IDs of the teams the user will be added to.",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Team Ids",
+                "type": "array"
+              },
+              "designation_id": {
+                "default": null,
+                "description": "ID of the designation to be associated with the user.",
+                "title": "Designation Id",
+                "type": "string"
+              },
+              "mobile": {
+                "default": null,
+                "description": "Mobile number of the user.",
+                "title": "Mobile",
+                "type": "string"
+              },
+              "last_name": {
+                "default": null,
+                "description": "The last name of the user.",
+                "title": "Last Name",
+                "type": "string"
+              },
+              "language": {
+                "default": null,
+                "description": "User's default language.",
+                "title": "Language",
+                "type": "string"
+              },
+              "display_name": {
+                "default": null,
+                "description": "The display name of the user.",
+                "title": "Display Name",
+                "type": "string"
+              },
+              "work_location": {
+                "default": null,
+                "description": "Work location of the user.",
+                "title": "Work Location",
+                "type": "string"
+              },
+              "phone": {
+                "default": null,
+                "description": "Phone number of the user.",
+                "title": "Phone",
+                "type": "string"
+              },
+              "employee_id": {
+                "default": null,
+                "description": "The user's employee ID.",
+                "title": "Employee Id",
+                "type": "string"
+              },
+              "image_data": {
+                "default": null,
+                "description": "The profile picture of the user in Base64 format.",
+                "title": "Image Data",
+                "type": "string"
+              },
+              "Custom_Field_UniqueName": {
+                "default": null,
+                "description": "Unique name of a custom user field.  \n- Note: This is not a static value and can change according to the user-defined field name.  \n- Example: For a custom user field \"Workplace Name\", provide its unique name `workplace_name`.\n",
+                "title": "Custom Field Uniquename",
+                "type": "string"
+              },
+              "first_name": {
+                "default": null,
+                "description": "The first name of the user.",
+                "title": "First Name",
+                "type": "string"
+              },
+              "reporting_to_zuid": {
+                "default": null,
+                "description": "User ID of the reporting manager.",
+                "title": "Reporting To Zuid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "email_id"
+            ],
+            "title": "ZohoCliq_Update_user_details_body_users_ItemSchema",
+            "type": "object"
+          },
+          "ZohoCliq_Update_user_details_path_variablesSchema": {
+            "properties": {
+              "User ID": {
+                "description": "Unique identifier of the user whose details needs to be updated.",
+                "title": "User Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "User ID"
+            ],
+            "title": "ZohoCliq_Update_user_details_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoCliq_Update_user_details_path_variablesSchema",
+            "description": ""
+          },
+          "body": {
+            "$ref": "#/$defs/ZohoCliq_Update_user_details_bodySchema",
+            "description": "Request body to create or update one or more users."
+          }
+        },
+        "required": [
+          "path_variables",
+          "body"
+        ],
+        "title": "ZohoCliq_Update_user_detailsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoMail_getAccountDetails",
+      "description": "Retrieve details of a specific Zoho Mail account.",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {
+          "path_variables": {
+            "type": "object",
+            "properties": {
+              "accountId": {
+                "description": "Unique identifier of the account.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountId"
+            ]
+          }
+        },
+        "required": [
+          "path_variables"
+        ]
+      },
+      "processed_schema": {
+        "$defs": {
+          "ZohoMail_getAccountDetails_path_variablesSchema": {
+            "properties": {
+              "accountId": {
+                "description": "Unique identifier of the account.",
+                "title": "Accountid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountId"
+            ],
+            "title": "ZohoMail_getAccountDetails_path_variablesSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "path_variables": {
+            "$ref": "#/$defs/ZohoMail_getAccountDetails_path_variablesSchema",
+            "description": ""
+          }
+        },
+        "required": [
+          "path_variables"
+        ],
+        "title": "ZohoMail_getAccountDetailsSchema",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ZohoMail_getMailAccounts",
+      "description": "This API is used to retrieve all the accounts details of the authenticated user.",
+      "raw_inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "processed_schema": {
+        "properties": {},
+        "title": "ZohoMail_getMailAccountsSchema",
+        "type": "object"
+      }
+    }
+  ]
+}

@@ -21,7 +21,7 @@
         "@playwright/mcp@latest"
       ],
       "enabled": true,
-      "expert_role": "You are a Playwright specialist with access to the user’s Playwright MCP server. You can crawl websites, extract structured content, scrape pages, and transform web data according to user instructions."
+      "expert_role": "You are a Playwright specialist with access to the user\u00e2\u20ac\u2122s Playwright MCP server. You can crawl websites, extract structured content, scrape pages, and transform web data according to user instructions."
     },
     {
       "name": "firecrawl-mcp",
@@ -35,21 +35,7 @@
         "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
       },
       "enabled": true,
-      "expert_role": "You are a Firecrawl specialist with access to the user’s Firecrawl MCP server. You can crawl websites, extract structured content, scrape pages, and transform web data according to user instructions."
-    },
-    {
-      "name": "figma",
-      "type": "node",
-      "command": "npx",
-      "args": [
-        "-y",
-        "mcp-figma"
-      ],
-      "env": {
-        "FIGMA_TOKEN": "${FIGMA_TOKEN}"
-      },
-      "enabled": true,
-      "expert_role": "Figma specialist for design operations and code generation through design"
+      "expert_role": "You are a Firecrawl specialist with access to the user\u00e2\u20ac\u2122s Firecrawl MCP server. You can crawl websites, extract structured content, scrape pages, and transform web data according to user instructions."
     },
     {
       "name": "youtube",
@@ -124,7 +110,7 @@
         "DISCORD_PASSWORD": "${DISCORD_PASSWORD}",
         "DISCORD_HEADLESS": "true"
       },
-      "enabled": true,
+      "enabled": false,
       "expert_role": "Discord communication specialist for managing channels and messages"
     },
     {
@@ -141,7 +127,10 @@
         "Content-Type": "application/json"
       },
       "enabled": true,
-      "expert_role": "Zoho specialist for managing Zoho applications and data"
+      "expert_role": "Zoho specialist for managing Zoho applications and data",
+      "disabled_tools": [
+        "ZohoCliq_Send_a_scheduled_message"
+      ]
     },
     {
       "name": "notion",
@@ -226,11 +215,15 @@
       "command": "npx",
       "args": [
         "-y",
-        "mcp-figma"
+        "figma-developer-mcp",
+        "--stdio"
       ],
+      "env": {
+        "FIGMA_API_KEY": "${FIGMA_API_KEY}"
+      },
       "enabled": true,
-      "expert_role": "Figma design specialist for accessing files, components, styles, and managing design assets",
-      "custom_prompt": "You are a Figma specialist with access to Figma's API. CRITICAL RULES:\n1. ALWAYS use the provided Figma tools to access design files, components, and styles\n2. Before using any Figma tools, check if the API key is configured using check_api_key\n3. If no API key is set, guide the user to set it using set_api_key with their Figma personal access token\n4. When accessing files, you'll need the Figma file key (found in the file URL)\n5. Provide clear information about design elements, components, and styles\n6. Handle comments and collaboration features professionally\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
+      "expert_role": "Figma developer specialist for generating pixel-perfect HTML/CSS from designs",
+      "custom_prompt": "You are an AI assistant that generates pixel-perfect HTML/CSS code from Figma designs using MCP tools.\n\nSTEP 1: Extract design data using get_figma_data\nSTEP 2: Download ALL assets using download_figma_images to ./output/assets/\nSTEP 3: Analyze layout, spacing, colors, typography, components, and responsiveness\nSTEP 4: Generate production-ready HTML with Tailwind CSS\nSTEP 5: Follow clean code and accessibility standards\nSTEP 6: Output in markdown code blocks\n\nCRITICAL RULES:\n1. ALWAYS verify API key using check_api_key\n2. If missing, ask user to configure it using set_api_key\n3. Use exact px values and hex colors\n4. Never skip asset download\n5. Always use ./assets paths\n6. Generate clean, production-ready code\n7. If any tool fails, explain clearly"
     }
   ],
   "dynamic_experts": {

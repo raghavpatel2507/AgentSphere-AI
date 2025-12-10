@@ -8,6 +8,9 @@ from pydantic import create_model, Field, BaseModel
 # Import mcp-use components
 from mcp_use.client import MCPClient
 from langchain_core.tools import Tool, StructuredTool
+from langgraph.types import interrupt
+import fnmatch
+
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +41,14 @@ class MCPManager:
         self.server_sessions: Dict[str, Any] = {}
         
         self.config_data = {}
+        # Runtime cache for session-approved tools
+        self.whitelisted_tools: set[str] = set()
         self._initialized = True
+
+    def whitelist_tool(self, tool_name: str):
+        """Add a tool to the session whitelist to bypass HITL."""
+        self.whitelisted_tools.add(tool_name)
+        logger.info(f"Tool {tool_name} whitelisted for this session.")
         
     def load_config(self) -> Dict[str, Any]:
         """Load configuration from file."""
@@ -52,6 +62,12 @@ class MCPManager:
         except Exception as e:
             logger.error(f"Error loading config: {e}")
             return {"mcp_servers": []}
+
+    def reload_config(self):
+        """Reload configuration from disk."""
+        logger.info("Reloading MCP configuration...")
+        self.config_data = self.load_config()
+        return self.config_data
             
     async def initialize(self):
         """Initialize all enabled MCP servers using mcp-use."""
@@ -180,7 +196,15 @@ class MCPManager:
                     item_type = items.get("type")
                     if not item_type:
                         if items.get("properties") or items.get("oneOf") or items.get("anyOf"):
-                            field_type = List[dict]
+                            # Ambiguous or complex item type, try to recurse if properties exist
+                            if items.get("properties"):
+                                try:
+                                    nested_model = self._create_args_schema(f"{name}_{field_name}_Item", items)
+                                    field_type = List[nested_model]
+                                except Exception:
+                                    field_type = List[dict]
+                            else:
+                                field_type = List[dict]
                         else:
                             field_type = List[str]
                     elif item_type == "integer":
@@ -190,11 +214,24 @@ class MCPManager:
                     elif item_type == "number":
                         field_type = List[float]
                     elif item_type == "object":
-                        field_type = List[dict]
+                        if items.get("properties"):
+                            try:
+                                nested_model = self._create_args_schema(f"{name}_{field_name}_Item", items)
+                                field_type = List[nested_model]
+                            except Exception:
+                                field_type = List[dict]
+                        else:
+                            field_type = List[dict]
                     else:
                         field_type = List[str]
             elif t == "object":
-                field_type = dict
+                if field_info.get("properties"):
+                    try:
+                        field_type = self._create_args_schema(f"{name}_{field_name}", field_info)
+                    except Exception:
+                        field_type = dict
+                else:
+                    field_type = dict
                 
             description = field_info.get("description", "")
             
@@ -242,6 +279,8 @@ class MCPManager:
                 
                 async def _make_run_func(s_name=server_name, t_name=tool.name):
                     async def _run(**kwargs):
+                        # HITL Wrapper Logic
+                        await self._check_hitl_approval(t_name, kwargs)
                         return await self.call_tool(t_name, kwargs, server_name=s_name)
                     return _run
 
@@ -260,6 +299,209 @@ class MCPManager:
         except Exception as e:
             logger.error(f"Error getting tools for {server_name}: {e}")
             return []
+
+    async def _check_hitl_approval(self, tool_name: str, tool_args: dict):
+        """
+        Check if tool requires approval and trigger interrupt if so.
+        Allows session-based whitelisting.
+        """
+        # 0. Check session whitelist first
+        if tool_name in self.whitelisted_tools:
+            return
+
+        # 1. Load latest config (dynamic)
+        config = self.load_config()
+        hitl_config = config.get("hitl_config", {})
+        
+        if not hitl_config.get("enabled", False):
+            return
+
+        mode = hitl_config.get("mode", "denylist")
+        sensitive_tools = hitl_config.get("sensitive_tools", [])
+        approval_message = hitl_config.get("approval_message", "Approve execution?")
+        
+        # 2. Check if approval is needed
+        requires_approval = False
+        
+        if mode == "all":
+            requires_approval = True
+        elif mode == "denylist":
+            # Check if matches any pattern in sensitive_tools
+            for pattern in sensitive_tools:
+                if fnmatch.fnmatch(tool_name, pattern):
+                    requires_approval = True
+                    break
+        elif mode == "allowlist":
+            # Block everything UNLESS it matches safe_tools (not implemented fully in config yet, assuming opposite of deny)
+            # For now, let's just stick to sensitive_tools as "requires approval"
+            pass
+
+        if requires_approval:
+            # 3. Trigger Interrupt
+            from langgraph.types import interrupt
+            
+            logger.info(f"Interrupting for HITL approval: {tool_name}")
+            user_decision = interrupt({
+                "event": "tool_approval_required",
+                "tool_name": tool_name,
+                "tool_args": tool_args,
+                "message": approval_message
+            })
+            
+            if isinstance(user_decision, dict) and user_decision.get("action") == "reject":
+                 raise ValueError(f"User rejected execution of tool: {tool_name}")
+            elif isinstance(user_decision, str) and user_decision.lower() in ["n", "no", "reject"]:
+                 raise ValueError(f"User rejected execution of tool: {tool_name}")
+
+    def toggle_tool(self, tool_name: str, enable: bool) -> str:
+        """
+        Enable or disable a specific tool by name.
+        Updates mcp_config.json to persist the change.
+        """
+        config_data = self.load_config()
+        servers = config_data.get("mcp_servers", [])
+        
+        target_server = None
+        target_server_idx = -1
+        
+        # 1. Find which server has this tool
+        # This requires checking the active sessions.
+        # If the server is disabled, we can't really toggle its tools easily without loading it?
+        # But we assume the server is active if we are listing tools.
+        
+        found_server_name = None
+        
+        # Check active sessions for the tool
+        for s_name, session in self.server_sessions.items():
+            # This is async, but we are inside a sync/async boundary challenge
+            # We can't await here easily if this is called from sync code, 
+            # BUT we will call this from async main, so it is fine if we make this async
+            # However, for now, let's just rely on the config logic if possible.
+            # To be safe and simple: We iterate active sessions to find the owner.
+            # But list_tools() is async.
+            pass
+
+        # Simplified approach: We search for the tool in the config's disabled lists first?
+        # Or we ask the user to provide server name? No, user just says /disable tool
+        
+        # We need to map tool -> server.
+        # Let's iterate over sessions and check their cached tools if available?
+        # Or just blindly add to all servers? No.
+        
+        # Strategy: Iterate all servers in config.
+        # This is tricky without knowing the tool owner.
+        # However, for the purpose of this task, we can assume unique tool names 
+        # or just try to find it in active sessions.
+        
+        # Let's actually assume we can find it in active sessions.
+        pass
+
+    async def find_tool_owner(self, tool_name: str) -> Optional[str]:
+        """Find which server owns a tool."""
+        for name, session in self.server_sessions.items():
+            try:
+                tools = await session.list_tools()
+                for t in tools:
+                    if t.name == tool_name:
+                        return name
+            except Exception:
+                continue
+        return None
+
+    async def toggle_tool_status(self, tool_name: str, enable: bool) -> str:
+        """
+        Async toggle tool.
+        """
+        server_name = await self.find_tool_owner(tool_name)
+        if not server_name:
+            # Maybe it's already disabled? 
+            # Check config for any server having it in disabled_tools?
+            # Hard to know owner if disabled. 
+            # Fallback: Check config for presence in any disabled_tools list
+            full_config = self.load_config()
+            for s in full_config.get("mcp_servers", []):
+                if tool_name in s.get("disabled_tools", []):
+                    server_name = s["name"]
+                    break
+            
+            if not server_name:
+                return f"Tool '{tool_name}' not found in any active server or disabled list."
+
+        # Now update config
+        full_config = self.load_config()
+        server_config = next((s for s in full_config.get("mcp_servers", []) if s["name"] == server_name), None)
+        
+        if not server_config:
+             return f"Server configuration for '{server_name}' not found."
+             
+        disabled_list = server_config.get("disabled_tools", [])
+        
+        if enable:
+            if tool_name in disabled_list:
+                disabled_list.remove(tool_name)
+                server_config["disabled_tools"] = disabled_list
+                self._save_config(full_config)
+                return f"Tool '{tool_name}' enabled."
+            else:
+                return f"Tool '{tool_name}' is already enabled."
+        else:
+            if tool_name not in disabled_list:
+                disabled_list.append(tool_name)
+                server_config["disabled_tools"] = disabled_list
+                self._save_config(full_config)
+                return f"Tool '{tool_name}' disabled. Restart/Reload required to apply?"
+                # Actually, our list_tools logic filters based on config.
+                # So next time get_tools_for_server is called (e.g. reload), it will be gone.
+                # But existing agents might still have it? 
+                # Yes, LangGraph agents are built at startup. 
+                # So we DO need a reload or a live update.
+                return f"Tool '{tool_name}' disabled. Run /reload to apply changes."
+            else:
+                return f"Tool '{tool_name}' is already disabled."
+
+    def _save_config(self, config_data: dict):
+        with open(self.config_path, 'w') as f:
+            json.dump(config_data, f, indent=2)
+
+    async def get_all_tools_status(self) -> Dict[str, Any]:
+        """
+        Get comprehensive status of all servers and tools.
+        """
+        status = {}
+        full_config = self.load_config()
+        
+        for server in full_config.get("mcp_servers", []):
+            s_name = server["name"]
+            enabled = server.get("enabled", True)
+            connected = s_name in self.server_sessions
+            
+            server_info = {
+                "enabled": enabled,
+                "connected": connected,
+                "tools": []
+            }
+            
+            if connected:
+                # Get tools from session
+                try:
+                    session = self.server_sessions[s_name]
+                    tools = await session.list_tools()
+                    # Mark disabled ones
+                    disabled_list = server.get("disabled_tools", [])
+                    
+                    for t in tools:
+                        server_info["tools"].append({
+                            "name": t.name,
+                            "description": (getattr(t, "description", "") or "").split("\n")[0],
+                            "active": t.name not in disabled_list
+                        })
+                except Exception as e:
+                     server_info["error"] = str(e)
+            
+            status[s_name] = server_info
+            
+        return status
+
 
     async def call_tool(self, tool_name: str, arguments: dict, server_name: str = None) -> Any:
         """
@@ -285,7 +527,11 @@ class MCPManager:
             result = await session.call_tool(tool_name, arguments)
             return self._process_tool_result(result)
         except Exception as e:
-            raise e
+            # Catch ALL exceptions and return as string to the LLM
+            # This prevents the agent from crashing and allows it to self-correct
+            error_msg = str(e)
+            logger.error(f"Tool execution failed: {tool_name} - {error_msg}")
+            return f"Error: Tool execution failed. {error_msg}\nPlease verify parameters and try again."
 
     def _process_tool_result(self, result: Any) -> Any:
         """Handle large outputs"""

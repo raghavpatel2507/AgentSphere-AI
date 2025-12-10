@@ -12,6 +12,8 @@ import asyncio
 import os
 from src.core.agents.supervisor import get_app
 from src.core.agents.callbacks import AgentCallbackHandler
+from src.core.mcp.manager import MCPManager
+from langgraph.types import Command
 from src.core.state import (
     init_checkpointer, 
     get_checkpointer, 
@@ -117,7 +119,6 @@ async def main():
             # Handle commands
             if user_input.lower() == "/exit":
                 print("\n👋 Goodbye!\n")
-                # Cleanup MCP connections before exit
                 print("🔄 Cleaning up MCP connections...")
                 manager = MCPManager()
                 await manager.cleanup()
@@ -125,27 +126,27 @@ async def main():
                 break
             
             elif user_input.lower() == "/new":
-                # Start new conversation with new thread ID
-                clear_current_session()  # Clear old session
-                thread_id, _ = get_or_create_session(tenant_id)  # Create fresh one
+                clear_current_session()
+                thread_id, _ = get_or_create_session(tenant_id)
                 config = get_config_for_thread(thread_id)
                 config["callbacks"] = [agent_callback]
                 print(f"\n✨ Started new conversation: {thread_id}\n")
                 continue
+
+            elif user_input.lower() == "/reload":
+                manager = MCPManager()
+                manager.reload_config()
+                print("\n✅ Configuration reloaded!\n")
+                continue
             
             elif user_input.lower() == "/history":
-                # Show conversation history
                 state = await app.aget_state(config)
                 if state.values.get("messages"):
                     print("\n📜 Conversation History:")
                     print("-" * 60)
                     for msg in state.values["messages"]:
-                        # Handle LangChain message objects properly
-                        # Messages are AIMessage, HumanMessage, SystemMessage, etc.
                         msg_type = type(msg).__name__.replace("Message", "").upper()
                         content = msg.content if hasattr(msg, "content") else str(msg)
-                        
-                        # Truncate long messages for display
                         display_content = content[:100] + "..." if len(content) > 100 else content
                         print(f"{msg_type}: {display_content}")
                     print("-" * 60)
@@ -154,225 +155,173 @@ async def main():
                 else:
                     print("\n📜 No conversation history yet.\n")
                 continue
-            
-            # Get current state to show what will be sent to supervisor
-            current_state = await app.aget_state(config)
-            current_messages = current_state.values.get("messages", [])
-            
-            # Show prompt data for verification
-            print("\n" + "🔍 " * 35)
-            print("BEFORE TRIMMING:")
-            print(f"Total messages in database: {len(current_messages)}")
-            print("🔍 " * 35)
-            
-            # Invoke supervisor with proper error handling
-            try:
-                result = await app.ainvoke(
-                    {"messages": [{"role": "user", "content": user_input}]},
-                    config=config
-                )
-                
-                # Show what was actually sent after trimming
-                post_state = await app.aget_state(config)
-                post_messages = post_state.values.get("messages", [])
-                
-                print("\n" + "📤 " * 35)
-                print("AFTER TRIMMING (Actual prompt sent to model):")
-                print_prompt_data(post_messages, "Messages Sent to Supervisor")
-                print("📤 " * 35)
-                
-            except Exception as e:
-                error_msg = str(e)
-                
-                # Handle different types of errors with user-friendly messages
-                if "413" in error_msg or "too large" in error_msg.lower():
-                    print("\n" + "=" * 70)
-                    print("❌ REQUEST TOO LARGE ERROR")
-                    print("=" * 70)
-                    print("\n📏 Your request exceeds the model's token limit.\n")
-                    print("📋 Quick Fix:")
-                    print("  1. Edit your .env file")
-                    print("  2. Change MAX_TOKENS to a lower value:")
-                    print("     MAX_TOKENS=6000  # For openai/gpt-oss-120b")
-                    print("  3. Restart the application")
-                    print("\n💡 Better Solution - Switch to a model with higher limits:")
-                    print("  - llama-3.1-70b-tool-use (128k context)")
-                    print("  - llama-3.3-70b-versatile (128k context)")
-                    print("  - gemini-2.0-flash-exp (1M context, free!)")
-                    print("\n⚠️  Current model (openai/gpt-oss-120b) has only 8k limit - too small!")
-                    print("=" * 70)
+
+            elif user_input.lower().startswith("/tools"):
+                manager = MCPManager()
+                args = user_input.split()
+                if len(args) > 1:
+                    # Specific tool/agent search (simplified)
+                    # We can pass the name to explore
+                    requested_name = args[1]
+                    print(f"\n🔍 Searching for tools matching '{requested_name}'...\n")
                     
-                elif "429" in error_msg or "quota" in error_msg.lower():
-                    print("\n" + "=" * 70)
-                    print("❌ QUOTA/RATE LIMIT ERROR")
-                    print("=" * 70)
-                    print("\n🚫 Your API quota is exceeded or rate limit hit.\n")
-                    print("📋 Possible Solutions:")
-                    print("  1. Check your OpenAI billing: https://platform.openai.com/usage")
-                    print("  2. Add funds to your account")
-                    print("  3. Wait a moment and try again (rate limit may reset)")
-                    print("  4. Switch to a different model in .env:")
-                    print("     - Change MODEL_NAME to 'gpt-3.5-turbo' (cheaper)")
-                    print("     - Or use Groq/Gemini (free tier available)")
-                    print("\n💡 To switch models:")
-                    print("  1. Edit .env file")
-                    print("  2. Uncomment a different model in src/core/agents/model.py")
-                    print("  3. Restart the application")
-                    print("=" * 70)
-                    
-                elif "401" in error_msg or "unauthorized" in error_msg.lower() or "api" in error_msg.lower() and "key" in error_msg.lower():
-                    print("\n" + "=" * 70)
-                    print("❌ API KEY ERROR")
-                    print("=" * 70)
-                    print("\n🔑 Your API key is invalid or missing.\n")
-                    print("📋 Solutions:")
-                    print("  1. Check your .env file has correct API key")
-                    print("  2. Verify key at: https://platform.openai.com/api-keys")
-                    print("  3. Make sure .env is loaded (should be in project root)")
-                    print("=" * 70)
-                    
-                elif "timeout" in error_msg.lower() or "connection" in error_msg.lower():
-                    print("\n" + "=" * 70)
-                    print("❌ NETWORK/CONNECTION ERROR")
-                    print("=" * 70)
-                    print("\n🌐 Network connection issue.\n")
-                    print("📋 Solutions:")
-                    print("  1. Check your internet connection")
-                    print("  2. Try again in a moment")
-                    print("  3. Check if OpenAI API is down: https://status.openai.com")
-                    print("=" * 70)
-                    
-                elif "context_length" in error_msg.lower() or "token" in error_msg.lower():
-                    print("\n" + "=" * 70)
-                    print("❌ TOKEN LIMIT ERROR")
-                    print("=" * 70)
-                    print("\n📏 Message context too long.\n")
-                    print("📋 Solutions:")
-                    print("  1. Lower MAX_TOKENS in .env (try 50000)")
-                    print("  2. Start a new conversation with /new")
-                    print("  3. Use a model with larger context window")
-                    print("=" * 70)
-                    
+                    found = False
+                    status = await manager.get_all_tools_status()
+                    for s_name, s_info in status.items():
+                        if requested_name.lower() in s_name.lower():
+                            print(f"📦 Server: {s_name} ({'Enabled' if s_info['enabled'] else 'Disabled'})")
+                            if s_info.get('error'):
+                                print(f"   ❌ Error: {s_info['error']}")
+                            elif not s_info['tools']:
+                                print("   ⚠️  No tools found.")
+                            else:
+                                for t in s_info['tools']:
+                                    status_icon = "🟢" if t['active'] else "🔴"
+                                    print(f"   {status_icon} {t['name']}")
+                                    print(f"      {t['description']}")
+                            found = True
+                    if not found:
+                         print("❌ No matching server found.")
                 else:
-                    # Generic error
-                    print("\n" + "=" * 70)
-                    print("❌ UNEXPECTED ERROR")
-                    print("=" * 70)
-                    print(f"\n💥 Error: {error_msg[:200]}")
-                    print("\n📋 Suggestions:")
-                    print("  1. Try your request again")
-                    print("  2. Use /new to start fresh conversation")
-                    print("  3. Check logs above for details")
-                    print("=" * 70)
-                
-                # Continue the conversation loop
-                print()
+                    # List all servers
+                    status = await manager.get_all_tools_status()
+                    print("\n🛠️  MCP Servers Status:")
+                    print("-" * 60)
+                    print(f"{'Server Name':<20} | {'Enabled':<8} | {'Connected':<10} | {'Tools':<5}")
+                    print("-" * 60)
+                    for s_name, s_info in status.items():
+                        enabled = "✅" if s_info['enabled'] else "❌"
+                        connected = "✅" if s_info['connected'] else "❌"
+                        tool_count = len(s_info['tools'])
+                        print(f"{s_name:<20} | {enabled:<8} | {connected:<10} | {tool_count:<5}")
+                    print("-" * 60)
+                    print("Use /tools <name> to see details.\n")
+                continue
+
+            elif user_input.lower().startswith("/enable"):
+                manager = MCPManager()
+                args = user_input.split()
+                if len(args) > 1:
+                    res = await manager.toggle_tool_status(args[1], True)
+                    print(f"\n✅ {res}\n")
+                else:
+                     print("\nUsage: /enable <tool_name>\n")
+                continue
+
+            elif user_input.lower().startswith("/disable"):
+                manager = MCPManager()
+                args = user_input.split()
+                if len(args) > 1:
+                    res = await manager.toggle_tool_status(args[1], False)
+                    print(f"\n⛔ {res}\n")
+                else:
+                     print("\nUsage: /disable <tool_name>\n")
                 continue
             
-            # Check if workflow is interrupted (waiting for approval)
+            # Streaming Loop
+            print("\n" + "🤖 " * 30)
+            print()
+            
+            try:
+                # Use astream_events for granular token streaming
+                async for event in app.astream_events(
+                    {"messages": [{"role": "user", "content": user_input}]},
+                    config=config,
+                    version="v2"
+                ):
+                    kind = event["event"]
+                    
+                    if kind == "on_chat_model_stream":
+                        content = event["data"]["chunk"].content
+                        if content:
+                            print(content, end="", flush=True)
+                            
+                    elif kind == "on_tool_start":
+                        print(f"\n\n🛠️  Running tool: {event['name']}...")
+                        inputs = event['data'].get('input')
+                        if inputs:
+                            print(f"   Input: {str(inputs)[:200]}...")
+                        
+                    elif kind == "on_tool_end":
+                         output = str(event['data'].get('output'))
+                         print(f"✅ Output: {output[:200]}...")
+                         print("\n", end="", flush=True) # Spacing back to normal flow
+
+            except Exception as e:
+                # pass interrupts
+                pass
+            
+            print("\n") # Final newline
+
+            # Check for interrupts (HITL)
             state = await app.aget_state(config)
             
-            while state.next:  # While there are pending nodes
+            if state.tasks and (parsed_interrupt := state.tasks[0].interrupts):
+                # We have an interrupt!
+                interrupt_value = parsed_interrupt[0].value
+                
                 print("\n" + "=" * 60)
-                print("⚠️  HUMAN-IN-THE-LOOP: Tool Execution Requires Approval")
+                print("⚠️  HUMAN-IN-THE-LOOP APPROVAL REQUIRED")
                 print("=" * 60)
                 
-                # Check if this is a tool approval interrupt
-                interrupt_data = None
-                if hasattr(state, 'tasks') and state.tasks:
-                    # Try to extract interrupt data from tasks
-                    for task in state.tasks:
-                        if hasattr(task, 'interrupts') and task.interrupts:
-                            for interrupt_item in task.interrupts:
-                                # Interrupt objects have a 'value' attribute
-                                if hasattr(interrupt_item, 'value'):
-                                    interrupt_data = interrupt_item.value
-                                    break
-                                elif isinstance(interrupt_item, dict):
-                                    interrupt_data = interrupt_item
-                                    break
-                            if interrupt_data:
-                                break
+                tool_name = interrupt_value.get("tool_name", "Unknown")
+                tool_args = interrupt_value.get("tool_args", {})
+                message = interrupt_value.get("message", "Approve?")
                 
-                # Display tool information if available
-                if interrupt_data and interrupt_data.get("event") == "tool_approval_required":
-                    tool_name = interrupt_data.get("tool_name", "Unknown")
-                    tool_args = interrupt_data.get("tool_args", {})
-                    
-                    print(f"\n🛠️  Tool: {tool_name}")
-                    print(f"📋 Arguments:")
-                    for key, value in tool_args.items():
-                        # Truncate long values for display
-                        display_value = str(value)[:200] + "..." if len(str(value)) > 200 else str(value)
-                        print(f"   - {key}: {display_value}")
-                else:
-                    # Fallback display - should not happen with proper interrupt setup
-                    print(f"\n⚠️  Waiting for approval to continue execution...")
-
+                print(f"\n🛠️  Tool: {tool_name}")
+                print(f"📋 Args: {tool_args}")
+                print(f"❓ {message}")
                 
-                # Request approval
                 print("\nOptions:")
-                print("  [y] Approve and continue")
-                print("  [n] Reject and stop")
-                print("  [m] Modify parameters (advanced)")
+                print("  [y] Approve")
+                print("  [a] Approve for Session (Auto-approve future calls)")
+                print("  [n] Reject")
                 
-                approval = input("\nYour decision: ").strip().lower()
+                decision = input("\nDecision: ").strip().lower()
                 
-                if approval == "y":
-                    print("\n✅ Approved! Continuing execution...\n")
-                    # Resume execution by passing None
-                    result = await app.ainvoke(
-                        None,
-                        config=config
-                    )
-                    # Check state again
-                    state = await app.aget_state(config)
-                
-                elif approval == "n":
-                    print("\n❌ Rejected! Stopping execution.\n")
-                    break
-                
-                elif approval == "m":
-                    print("\n⚙️  Parameter modification not yet implemented.\n")
-                    print("Approving with original parameters...\n")
-                    result = await app.ainvoke(
-                        None,
-                        config=config
-                    )
-                    state = await app.aget_state(config)
-                
-                else:
-                    print("\n❓ Invalid input. Please enter 'y', 'n', or 'm'.\n")
-            
-            # Display final response
-            print("\n" + "=" * 60)
-            print("🤖 Assistant Response:")
-            print("=" * 60)
-            
-            if result.get("messages"):
-                last_message = result["messages"][-1]
-                if hasattr(last_message, "content"):
-                    content = last_message.content
+                if decision in ["y", "yes"]:
+                    print("\n✅ Approved. Resuming...\n")
+                    resume_value = {"action": "approve"}
                     
-                    # Handle structured content (list of dicts with text/extras)
-                    if isinstance(content, list):
-                        # Extract text from each item
-                        text_parts = []
-                        for item in content:
-                            if isinstance(item, dict) and "text" in item:
-                                text_parts.append(item["text"])
-                            elif isinstance(item, str):
-                                text_parts.append(item)
-                            else:
-                                text_parts.append(str(item))
-                        print(f"\n{' '.join(text_parts)}\n")
-                    else:
-                        # Simple string content
-                        print(f"\n{content}\n")
+                    # Resume stream
+                    async for chunk in app.astream(
+                        Command(resume=resume_value),
+                        config=config,
+                        stream_mode="updates"
+                    ):
+                         for node, values in chunk.items():
+                            if "messages" in values:
+                                print(f"\n[{node}]: {values['messages'][-1].content}\n")
 
+                elif decision in ["a", "all", "always"]:
+                    print(f"\n✅ Approved {tool_name} for this session. Resuming...\n")
+                    resume_value = {"action": "approve_forever"}
+                    
+                    # Resume stream
+                    async for chunk in app.astream(
+                        Command(resume=resume_value),
+                        config=config,
+                        stream_mode="updates"
+                    ):
+                         for node, values in chunk.items():
+                            if "messages" in values:
+                                print(f"\n[{node}]: {values['messages'][-1].content}\n")
+                                
                 else:
-                    print(f"\n{last_message}\n")
-            
+                    print("\n❌ Rejected.\n")
+                    resume_value = {"action": "reject"}
+                    
+                    # Resume stream (wont execute tool, will raise error in manager)
+                    try:
+                        async for chunk in app.astream(
+                            Command(resume=resume_value),
+                            config=config,
+                            stream_mode="updates"
+                        ):
+                             pass
+                    except Exception as e:
+                        print(f"Error after rejection: {e}")
+
             print("=" * 60)
             print()
         
