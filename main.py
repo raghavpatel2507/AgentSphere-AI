@@ -57,6 +57,14 @@ def print_prompt_data(messages, title="Prompt Data"):
     print()
 
 
+
+def build_agent_app(checkpointer):
+    """
+    Builds the LangGraph application. 
+    Can be called repeatedly for hot swapping.
+    """
+    return get_app(checkpointer=checkpointer)
+
 async def main():
     """Main async function for continuous chat with HITL."""
     
@@ -77,9 +85,8 @@ async def main():
     dynamic_experts.update(experts)
     print(f"✅ Initialized {len(experts)} dynamic experts")
     
-    # Get supervisor app with checkpointer
-    # Note: get_app calls create_workflow which uses the now-populated dynamic_experts
-    app = get_app(checkpointer=checkpointer)
+    # 1. Build app initially
+    app = build_agent_app(checkpointer)
     
     # Setup tenant and get/create session
     tenant_id = os.getenv("DEFAULT_TENANT_ID", "default")
@@ -134,9 +141,18 @@ async def main():
                 continue
 
             elif user_input.lower() == "/reload":
+                # Deep Reload: Restarts MCP connections
                 manager = MCPManager()
                 manager.reload_config()
-                print("\n✅ Configuration reloaded!\n")
+                
+                print("🔄 Deep reloading agents...")
+                # Re-fetch all dynamic agents (forces MCP discovery)
+                experts = await get_dynamic_agents()
+                dynamic_experts.update(experts)
+                
+                # Rebuild app
+                app = build_agent_app(checkpointer)
+                print("\n✅ Configuration and Agents reloaded!\n")
                 continue
             
             elif user_input.lower() == "/history":
@@ -203,7 +219,14 @@ async def main():
                 args = user_input.split()
                 if len(args) > 1:
                     res = await manager.toggle_tool_status(args[1], True)
-                    print(f"\n✅ {res}\n")
+                    print(f"\n✅ {res}")
+                    
+                    # HOT SWAP
+                    print("🔄 Hot-swapping agent logic...")
+                    experts = await get_dynamic_agents() # Refresh tools
+                    dynamic_experts.update(experts)
+                    app = build_agent_app(checkpointer)
+                    print("⚡ Agent updated instantly!\n")
                 else:
                      print("\nUsage: /enable <tool_name>\n")
                 continue
@@ -213,7 +236,14 @@ async def main():
                 args = user_input.split()
                 if len(args) > 1:
                     res = await manager.toggle_tool_status(args[1], False)
-                    print(f"\n⛔ {res}\n")
+                    print(f"\n⛔ {res}")
+                    
+                    # HOT SWAP
+                    print("🔄 Hot-swapping agent logic...")
+                    experts = await get_dynamic_agents()
+                    dynamic_experts.update(experts)
+                    app = build_agent_app(checkpointer)
+                    print("⚡ Agent updated instantly!\n")
                 else:
                      print("\nUsage: /disable <tool_name>\n")
                 continue

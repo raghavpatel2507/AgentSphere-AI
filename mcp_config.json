@@ -128,9 +128,7 @@
       },
       "enabled": true,
       "expert_role": "Zoho specialist for managing Zoho applications and data",
-      "disabled_tools": [
-        "ZohoCliq_Send_a_scheduled_message"
-      ]
+      "disabled_tools": []
     },
     {
       "name": "notion",
@@ -259,8 +257,8 @@
     ]
   },
   "llm": {
-    "provider": "openai",
-    "model": "gpt-4.1-mini",
+    "provider": "groq",
+    "model": "openai/gpt-oss-120b",
     "temperature": 0.3,
     "max_tokens": 100000
   }

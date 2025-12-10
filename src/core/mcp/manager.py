@@ -43,6 +43,10 @@ class MCPManager:
         self.config_data = {}
         # Runtime cache for session-approved tools
         self.whitelisted_tools: set[str] = set()
+        
+        # Tool Definition Cache (server_name -> list[tool])
+        self.tool_cache: Dict[str, List[Any]] = {}
+        
         self._initialized = True
 
     def whitelist_tool(self, tool_name: str):
@@ -67,6 +71,8 @@ class MCPManager:
         """Reload configuration from disk."""
         logger.info("Reloading MCP configuration...")
         self.config_data = self.load_config()
+        # Invalidate tool cache on Deep Reload (API key changes etc.)
+        self.tool_cache = {}
         return self.config_data
             
     async def initialize(self):
@@ -133,6 +139,11 @@ class MCPManager:
             if not config.get("enabled", False):
                 return
 
+            # Optimization: Skip if already connected
+            if name in self.server_sessions:
+                # logger.debug(f"Skipping re-init for active server: {name}")
+                return
+
             # Resolve configuration
             server_config = self._resolve_config(config)
 
@@ -158,10 +169,10 @@ class MCPManager:
     async def cleanup(self):
         """Disconnect all servers."""
         if self._mcp_client:
-            # close_all_sessions exists on client
             try:
                 await self._mcp_client.close_all_sessions()
-            except:
+            except Exception:
+                # Suppress "Attempted to exit cancel scope" from anyio/mcp-use
                 pass
             self._mcp_client = None
         self.server_sessions.clear()
@@ -249,6 +260,36 @@ class MCPManager:
             
         return create_model(f"{name}Schema", **fields)
 
+    def _create_langchain_tool(self, tool: Any, server_name: str) -> StructuredTool:
+        """Convert MCP tool to LangChain StructuredTool."""
+        # Setup args schema
+        args_schema = self._create_args_schema(tool.name, getattr(tool, "inputSchema", {}))
+        
+        # Create callable wrapper
+        async def _make_run_func(s_name=server_name, t_name=tool.name):
+            async def _run(**kwargs):
+                # HITL Wrapper Logic
+                await self._check_hitl_approval(t_name, kwargs)
+                return await self.call_tool(t_name, kwargs, server_name=s_name)
+            return _run
+
+        return StructuredTool.from_function(
+            name=tool.name,
+            description=getattr(tool, "description", "") or "",
+            func=None,
+            # Use the helper to create the async wrapper
+            coroutine=self._create_tool_coroutine(server_name, tool.name),
+            args_schema=args_schema
+        )
+
+    def _create_tool_coroutine(self, server_name: str, tool_name: str):
+        """Create the async function for the tool."""
+        async def _run(**kwargs):
+            # HITL Wrapper Logic
+            await self._check_hitl_approval(tool_name, kwargs)
+            return await self.call_tool(tool_name, kwargs, server_name=server_name)
+        return _run
+
     async def get_tools_for_server(self, server_name: str) -> List[StructuredTool]:
         """Get tools for a specific server, converting to LangChain tools."""
         session = self.server_sessions.get(server_name)
@@ -265,36 +306,25 @@ class MCPManager:
             server_config = next((s for s in full_config.get("mcp_servers", []) if s["name"] == server_name), {})
             disabled_tools = server_config.get("disabled_tools", [])
             
-            lc_tools = []
+            langchain_tools = []
             for tool in mcp_tools:
                 if tool.name in disabled_tools:
                     continue
-                    
-                # Setup args schema
-                # tool.inputSchema is the JSON schema
-                args_schema = self._create_args_schema(tool.name, getattr(tool, "inputSchema", {}))
+                # Skip if disabled
+                # (We also cache ALL tools, so we filter them later if retrieved from cache)
+                # But here we just build the list.
+                # ACTUALLY: We should cache ALL tools, then filter at return.
                 
-                # Create callable wrapper
-                # We need to bind the specific session and tool name
-                
-                async def _make_run_func(s_name=server_name, t_name=tool.name):
-                    async def _run(**kwargs):
-                        # HITL Wrapper Logic
-                        await self._check_hitl_approval(t_name, kwargs)
-                        return await self.call_tool(t_name, kwargs, server_name=s_name)
-                    return _run
-
-                lc_tool = StructuredTool.from_function(
-                    name=tool.name,
-                    description=getattr(tool, "description", "") or "",
-                    func=None,
-                    coroutine=await _make_run_func(),
-                    args_schema=args_schema
-                )
-                
-                lc_tools.append(lc_tool)
-                
-            return lc_tools
+                # Convert to LangChain tool
+                lc_tool = self._create_langchain_tool(tool, server_name)
+                langchain_tools.append(lc_tool)
+            
+            # Store ALL tools in cache
+            self.tool_cache[server_name] = langchain_tools
+            
+            # Return only enabled ones
+            active_tools = [t for t in langchain_tools if t.name not in disabled_tools]
+            return active_tools
             
         except Exception as e:
             logger.error(f"Error getting tools for {server_name}: {e}")
@@ -509,6 +539,15 @@ class MCPManager:
         If server_name is provided, use that session.
         Otherwise, scan sessions (slower/risky).
         """
+        # --- Runtime Guard ---
+        # Check if the tool is explicitly disabled in the config
+        # This prevents use of tools that were disabled via CLI but might still be in the agent's context context
+        config = self.load_config()
+        for server in config.get("mcp_servers", []):
+             if tool_name in server.get("disabled_tools", []):
+                  logger.warning(f"Blocked attempt to use disabled tool: {tool_name}")
+                  return f"Error: The tool '{tool_name}' is currently disabled by the administrator."
+        
         session = None
         
         if server_name:
