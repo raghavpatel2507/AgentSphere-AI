@@ -46,9 +46,11 @@ class AgentCallbackHandler(BaseCallbackHandler):
         """Handle tool errors, but suppress interrupt errors (expected for HITL)."""
         # Check if this is an interrupt error (expected for HITL approval)
         error_str = str(error)
-        if "Interrupt" in error_str and "tool_approval_required" in error_str:
+        error_type = type(error).__name__
+        
+        if "Interrupt" in error_type or ("Interrupt" in error_str and "tool_approval_required" in error_str):
             # This is an expected interrupt for HITL approval, don't show as error
-            print(f"\033[1;33m⏸️  Paused for approval\033[0m\n")
+            print(f"\033[1;33m⏸️  Waiting for approval...\033[0m\n")
         else:
             # Real error, show it
             print(f"\033[1;31m❌ Error: {error}\033[0m\n")

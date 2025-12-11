@@ -74,28 +74,20 @@
         "--token",
         "src/configs/gmail_token.json"
       ],
-      "enabled": true,
-      "expert_role": "Email specialist for Gmail operations",
-      "custom_prompt": "You are a Gmail specialist with access to the user's Gmail account.\n\nCRITICAL RULES:\n1. ALWAYS use the provided Gmail tools for email operations\n2. Respect user privacy and data sensitivity\n3. Format email content clearly when presenting to users\n4. Handle authentication errors gracefully\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
+      "enabled": true
     },
     {
       "name": "github",
       "type": "httpx",
-      "url": "https://api.githubcopilot.com/mcp/x/repos",
-      "headers": {
-        "X-MCP-Toolsets": "repos",
-        "Authorization": "Bearer ${GITHUB_MCP_TOKEN}"
-      },
-      "tool_defaults": {
-        "owner": "${GITHUB_USERNAME}"
-      },
-      "env": {
-        "GITHUB_MCP_TOKEN": "${GITHUB_MCP_TOKEN}",
-        "GITHUB_USERNAME": "${GITHUB_USERNAME}"
+      "url": "https://api.githubcopilot.com/mcp/",
+      "auth": {
+        "client_id": "Ov23lifJTKuOW3wgsH1E",
+        "client_secret": "3991581fe00c3be04c99e1c736389b1a64784b71",
+        "scope": "repo",
+        "callback_port": 8080
       },
       "enabled": true,
-      "expert_role": "GitHub specialist for repositories, issues, and pull requests",
-      "custom_prompt": "You are a GitHub specialist. CRITICAL: You ONLY work with repositories owned by 'raghavpatel2507'. NEVER access or search repositories from other users. When listing or searching repositories, ALWAYS use owner='raghavpatel2507'. When reading files, ALWAYS use owner='raghavpatel2507'. If a user asks about a repository without specifying the owner, assume it belongs to 'raghavpatel2507'."
+      "additional_instructions": "Always use GitHub MCP tools for all repo, branch, file, issue, and PR operations. Do not assume state—fetch before acting. Ask for clarification when repo/path is unclear. Confirm destructive actions. Keep responses short and structured. Next message must be a tool call when an action is needed."
     },
     {
       "name": "discord",
@@ -117,12 +109,6 @@
       "name": "zoho",
       "type": "httpx",
       "url": "https://agentsphere-60059048845.zohomcp.in/mcp/message?key=4826f38f3035b49a33b8ae17531c7e89",
-      "args": [
-        "--creds-file-path",
-        "../../../../configs/zoho_credential.json",
-        "--token-path",
-        "../../../../configs/zoho_token.json"
-      ],
       "headers": {
         "Content-Type": "application/json"
       },
@@ -143,7 +129,7 @@
       },
       "enabled": true,
       "expert_role": "Notion specialist for managing pages, databases, and workspace content",
-      "custom_prompt": "You are a Notion specialist with access to the user's Notion workspace.\n\nCRITICAL RULES:\n1. ALWAYS use the provided Notion tools to query pages, databases, and comments\n2. When searching, use specific keywords to narrow down results\n3. For database queries, respect the user's access permissions\n4. Format Notion content clearly when presenting to users\n5. If a tool fails, check if the page/database is connected to the integration\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
+      "additional_instructions": "CRITICAL RULES:\n1. ALWAYS use the provided Notion tools to query pages, databases, and comments\n2. When searching, use specific keywords to narrow down results\n3. For database queries, respect the user's access permissions\n4. Format Notion content clearly when presenting to users\n5. If a tool fails, check if the page/database is connected to the integration\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
     },
     {
       "name": "google-drive",
@@ -170,7 +156,7 @@
       "cwd": ".",
       "enabled": true,
       "expert_role": "PowerPoint specialist for creating, editing, and manipulating presentations with professional design",
-      "custom_prompt": "You are a PowerPoint specialist. CRITICAL WORKFLOW: Before using ANY presentation manipulation tools (like auto_generate_presentation, add_slide, add_text, etc.), you MUST first call create_presentation to initialize a new presentation. The create_presentation tool returns a presentation_id that other tools will use. WORKFLOW: 1) create_presentation (ALWAYS FIRST), 2) Use other tools to manipulate the presentation, 3) save_presentation when done. If a tool fails with 'No presentation is currently loaded', it means you forgot step 1."
+      "additional_instructions": "CRITICAL WORKFLOW: Before using ANY presentation manipulation tools (like auto_generate_presentation, add_slide, add_text, etc.), you MUST first call create_presentation to initialize a new presentation. The create_presentation tool returns a presentation_id that other tools will use. WORKFLOW: 1) create_presentation (ALWAYS FIRST), 2) Use other tools to manipulate the presentation, 3) save_presentation when done. If a tool fails with 'No presentation is currently loaded', it means you forgot step 1."
     },
     {
       "name": "mobile",
@@ -183,7 +169,7 @@
       "cwd": ".",
       "enabled": true,
       "expert_role": "Mobile automation specialist for Android and iOS device control, app management, and screen interaction",
-      "custom_prompt": "You are a mobile automation specialist. You can control Android and iOS devices, manage apps, interact with screens, and automate mobile tasks. IMPORTANT: Before performing any mobile action, first use mobile_list_available_devices to check connected devices. NOTE: When calling mobile_list_available_devices, you MUST provide the argument 'noParams': {}. Always verify device availability before attempting operations."
+      "additional_instructions": "IMPORTANT: Before performing any mobile action, first use mobile_list_available_devices to check connected devices. NOTE: When calling mobile_list_available_devices, you MUST provide the argument 'noParams': {}. Always verify device availability before attempting operations."
     },
     {
       "name": "aws-knowledge",
@@ -194,7 +180,7 @@
       },
       "enabled": true,
       "expert_role": "AWS specialist for accessing AWS service documentation, best practices, and technical knowledge",
-      "custom_prompt": "You are an AWS knowledge specialist with access to comprehensive AWS documentation and best practices. CRITICAL RULES:\n1. ALWAYS use the provided AWS knowledge tools to answer AWS-related questions\n2. Provide accurate, up-to-date information about AWS services\n3. Include relevant links to official AWS documentation when available\n4. Explain AWS concepts clearly with examples\n5. Recommend best practices for AWS architecture and security\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
+      "additional_instructions": "CRITICAL RULES:\n1. ALWAYS use the provided AWS knowledge tools to answer AWS-related questions\n2. Provide accurate, up-to-date information about AWS services\n3. Include relevant links to official AWS documentation when available\n4. Explain AWS concepts clearly with examples\n5. Recommend best practices for AWS architecture and security\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
     },
     {
       "name": "peek-travel",
@@ -205,7 +191,7 @@
       },
       "enabled": true,
       "expert_role": "Travel planning specialist with access to 300k+ experiences worldwide for building itineraries",
-      "custom_prompt": "You are a travel planning specialist with access to Peek's extensive database of 300k+ travel experiences, activities, and tours worldwide. CRITICAL RULES:\n1. ALWAYS use the provided Peek tools to search for activities, get details, and check availability\n2. When planning itineraries, consider location, dates, budget, and traveler preferences\n3. Provide detailed information about experiences including pricing, duration, and highlights\n4. Suggest multiple options to give travelers choices\n5. Include practical details like meeting points, what's included, and cancellation policies\n6. Build comprehensive day-by-day itineraries when requested\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
+      "additional_instructions": "CRITICAL RULES:\n1. ALWAYS use the provided Peek tools to search for activities, get details, and check availability\n2. When planning itineraries, consider location, dates, budget, and traveler preferences\n3. Provide detailed information about experiences including pricing, duration, and highlights\n4. Suggest multiple options to give travelers choices\n5. Include practical details like meeting points, what's included, and cancellation policies\n6. Build comprehensive day-by-day itineraries when requested\n\nALWAYS follow the EXECUTION FLOW and RESPONSE FORMAT from your base prompt."
     },
     {
       "name": "figma",
@@ -221,7 +207,7 @@
       },
       "enabled": true,
       "expert_role": "Figma developer specialist for generating pixel-perfect HTML/CSS from designs",
-      "custom_prompt": "You are an AI assistant that generates pixel-perfect HTML/CSS code from Figma designs using MCP tools.\n\nSTEP 1: Extract design data using get_figma_data\nSTEP 2: Download ALL assets using download_figma_images to ./output/assets/\nSTEP 3: Analyze layout, spacing, colors, typography, components, and responsiveness\nSTEP 4: Generate production-ready HTML with Tailwind CSS\nSTEP 5: Follow clean code and accessibility standards\nSTEP 6: Output in markdown code blocks\n\nCRITICAL RULES:\n1. ALWAYS verify API key using check_api_key\n2. If missing, ask user to configure it using set_api_key\n3. Use exact px values and hex colors\n4. Never skip asset download\n5. Always use ./assets paths\n6. Generate clean, production-ready code\n7. If any tool fails, explain clearly"
+      "additional_instructions": "STEP 1: Extract design data using get_figma_data\nSTEP 2: Download ALL assets using download_figma_images to ./output/assets/\nSTEP 3: Analyze layout, spacing, colors, typography, components, and responsiveness\nSTEP 4: Generate production-ready HTML with Tailwind CSS\nSTEP 5: Follow clean code and accessibility standards\nSTEP 6: Output in markdown code blocks\n\nCRITICAL RULES:\n1. ALWAYS verify API key using check_api_key\n2. If missing, ask user to configure it using set_api_key\n3. Use exact px values and hex colors\n4. Never skip asset download\n5. Always use ./assets paths\n6. Generate clean, production-ready code\n7. If any tool fails, explain clearly"
     }
   ],
   "dynamic_experts": {
@@ -237,9 +223,9 @@
       "browser_click",
       "browser_fill",
       "browser_type",
-      "create_*",
       "delete_*",
       "write_*",
+      "create_*",
       "execute_*",
       "send_*",
       "post_*",
@@ -257,9 +243,9 @@
     ]
   },
   "llm": {
-    "provider": "groq",
-    "model": "openai/gpt-oss-120b",
-    "temperature": 0.3,
-    "max_tokens": 100000
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "temperature": 0.5,
+    "max_tokens": 800000
   }
 }

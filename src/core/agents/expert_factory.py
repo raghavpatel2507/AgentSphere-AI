@@ -11,18 +11,17 @@ class ExpertFactory:
     """
     
     @staticmethod
-    def create_expert_prompt(role: str, tools: List[Any], custom_template: Optional[str] = None) -> str:
+    def create_expert_prompt(role: str, tools: List[Any], additional_instructions: Optional[str] = None) -> str:
         """Generate hardened system prompt for an expert agent."""
 
         tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in tools])
 
-        if custom_template:
-            try:
-                return custom_template.format(expert_role=role, tools=tool_descriptions)
-            except (IndexError, KeyError, ValueError):
-                # Fallback if template has issues (e.g. unescaped braces or missing keys)
-                # We return the raw template to avoid crashing, though tools might be missing.
-                return custom_template
+        instructions_block = ""
+        if additional_instructions:
+            instructions_block = f"""
+    ADDITIONAL INSTRUCTIONS:
+    {additional_instructions}
+    """
             
         return f"""
     You are a HIGH-PRECISION {role} AGENT with access to specific tools.
@@ -30,7 +29,7 @@ class ExpertFactory:
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     AVAILABLE TOOLS:
     {tool_descriptions}
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{instructions_block}
 
     CRITICAL ANTI-HALLUCINATION RULES:
     1. NEVER claim you did something unless you have a successful TOOL RESPONSE.
@@ -38,23 +37,48 @@ class ExpertFactory:
     3. If a tool fails, you MUST report the failure. DO NOT pretend it succeeded.
     4. You MUST include the actual output from the tool in your final response as proof.
     
+    MANDATORY EXECUTION REQUIREMENT:
+    - If you receive a task via transfer, you MUST execute at least ONE relevant tool
+    - You CANNOT return to supervisor without attempting tool execution
+    - If you don't have the right tools, explicitly say "I cannot perform this task with my available tools"
+    - If tools fail, report the error and suggest alternatives
+    - NEVER return empty-handed after receiving a transfer
+    
+    MISSING INFORMATION PROTOCOL:
+    - If you need information to execute (e.g., email content, file path, etc.), DO NOT return silently
+    - Instead, respond with: "I need the following information to proceed: [list what's missing]"
+    - The supervisor will provide the missing information and call you again
+    - DO NOT make assumptions or use placeholder data
+    
     VERIFICATION REQUIRED:
     When you claim a task is done, you must be able to point to a specific tool output that confirms it.
     
     EXECUTION PROTOCOL:
     1. Assess the user request.
     2. Check if you have the right tool.
-    3. If yes, CALL THE TOOL.
-    4. If no, or if you need another expert, use a routing tool or reply with "I cannot perform this."
-    5. Analyze the Tool Output.
-       - If "Error", try to fix parameters or fallback.
-       - If Success, report the result to the user.
+    3. Check if you have all required information.
+    4. If missing info: "I need [specific information] to proceed."
+    5. If no suitable tools: "I cannot perform this task with my available tools."
+    6. If ready: CALL THE TOOL immediately.
+    7. Analyze the Tool Output.
+       - If "Error", try to fix parameters or report the failure.
+       - If Success, report the result to the user with proof.
        
-    FINAL ANSWER FORMAT:
+    FINAL ANSWER FORMAT (Success):
     "I have [action taken].
-    Tool Output Verification: [paste brief summary of tool output here]"
+    Tool Output Verification: [paste actual tool output here as proof]"
     
-    DO NOT apologize. DO NOT fabricate. EXECUTE.
+    FINAL ANSWER FORMAT (Missing Info):
+    "I need the following information to proceed:
+    - [item 1]
+    - [item 2]
+    Please provide these details so I can complete the task."
+    
+    FINAL ANSWER FORMAT (Cannot Do):
+    "I was unable to complete this task.
+    Reason: [specific reason - no suitable tools / tool error / etc.]"
+
+    DO NOT apologize. DO NOT fabricate. EXECUTE, REQUEST INFO, OR ADMIT INABILITY.
     """
 
 
@@ -91,7 +115,7 @@ class ExpertFactory:
                 
             server_name = server.get("name")
             expert_role = server.get("expert_role", f"{server_name} specialist")
-            custom_prompt = server.get("custom_prompt")
+            additional_instructions = server.get("additional_instructions")
             
             # Get tools for this server (now returns LangChain Tools)
             langchain_tools = await manager.get_tools_for_server(server_name)
@@ -103,7 +127,7 @@ class ExpertFactory:
             system_prompt = ExpertFactory.create_expert_prompt(
                 role=expert_role,
                 tools=langchain_tools,
-                custom_template=custom_prompt or expert_template
+                additional_instructions=additional_instructions
             )
             
             # Create agent

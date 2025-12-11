@@ -277,16 +277,41 @@ async def main():
                          print(f"✅ Output: {output[:200]}...")
                          print("\n", end="", flush=True) # Spacing back to normal flow
 
+            except KeyboardInterrupt:
+                # Always allow Ctrl+C to work
+                raise
             except Exception as e:
-                # pass interrupts
+                # Check if this is an interrupt for HITL approval
+                # Interrupts need to bubble up to the approval handler below
+                exception_type = type(e).__name__
+                exception_str = str(e)
+                
+                if "Interrupt" in exception_type or "interrupt" in exception_str.lower():
+                    # This is a HITL interrupt, let it propagate
+                    raise
+                
+                # Only suppress non-interrupt streaming errors
+                # print(f"DEBUG: Suppressed streaming error: {type(e)} {e}")
                 pass
+            
             
             print("\n") # Final newline
 
-            # Check for interrupts (HITL)
-            state = await app.aget_state(config)
-            
-            if state.tasks and (parsed_interrupt := state.tasks[0].interrupts):
+            # Check for interrupts (HITL) - Loop until no more interrupts
+            while True:
+                state = await app.aget_state(config)
+                
+                # DEBUG
+                # if state.tasks:
+                #     print(f"DEBUG: Tasks found: {len(state.tasks)}")
+                #     print(f"DEBUG: Interrupts: {state.tasks[0].interrupts}")
+                # else:
+                #     print(f"DEBUG: No tasks in state.")
+                
+                if not (state.tasks and (parsed_interrupt := state.tasks[0].interrupts)):
+                    # No more interrupts, workflow is complete
+                    break
+                    
                 # We have an interrupt!
                 interrupt_value = parsed_interrupt[0].value
                 
@@ -351,6 +376,7 @@ async def main():
                              pass
                     except Exception as e:
                         print(f"Error after rejection: {e}")
+                    break  # Exit the approval loop after rejection
 
             print("=" * 60)
             print()

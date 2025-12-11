@@ -279,7 +279,8 @@ class MCPManager:
             func=None,
             # Use the helper to create the async wrapper
             coroutine=self._create_tool_coroutine(server_name, tool.name),
-            args_schema=args_schema
+            args_schema=args_schema,
+            handle_tool_error=False # Allow interrupts to bubble up
         )
 
     def _create_tool_coroutine(self, server_name: str, tool_name: str):
@@ -496,6 +497,7 @@ class MCPManager:
     async def get_all_tools_status(self) -> Dict[str, Any]:
         """
         Get comprehensive status of all servers and tools.
+        Uses caching to avoid hanging on unresponsive servers.
         """
         status = {}
         full_config = self.load_config()
@@ -512,21 +514,35 @@ class MCPManager:
             }
             
             if connected:
-                # Get tools from session
-                try:
-                    session = self.server_sessions[s_name]
-                    tools = await session.list_tools()
-                    # Mark disabled ones
+                # 1. Try Cache First (Fast path, avoids stuck servers)
+                if s_name in self.tool_cache:
+                    cached_tools = self.tool_cache[s_name]
                     disabled_list = server.get("disabled_tools", [])
                     
-                    for t in tools:
+                    for t in cached_tools:
                         server_info["tools"].append({
                             "name": t.name,
                             "description": (getattr(t, "description", "") or "").split("\n")[0],
                             "active": t.name not in disabled_list
                         })
-                except Exception as e:
-                     server_info["error"] = str(e)
+                else:
+                    # 2. Live Fetch with Timeout (Slow path)
+                    try:
+                        session = self.server_sessions[s_name]
+                        # prevent hanging if server is down (e.g. rate limited figma)
+                        tools = await asyncio.wait_for(session.list_tools(), timeout=2.0)
+                        
+                        disabled_list = server.get("disabled_tools", [])
+                        for t in tools:
+                             server_info["tools"].append({
+                                "name": t.name,
+                                "description": (getattr(t, "description", "") or "").split("\n")[0],
+                                "active": t.name not in disabled_list
+                            })
+                    except asyncio.TimeoutError:
+                        server_info["error"] = "Timeout fetching tools (Server Unresponsive)"
+                    except Exception as e:
+                         server_info["error"] = str(e)
             
             status[s_name] = server_info
             
