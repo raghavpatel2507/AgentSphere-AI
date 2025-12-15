@@ -212,8 +212,7 @@
   ],
   "dynamic_experts": {
     "enabled": true,
-    "auto_create_from_tools": true,
-    "expert_template": "You are a {expert_role}.\n\nAvailable Tools:\n{tools}\n\nRULES:\n1. ALWAYS use the provided tools to answer user requests.\n2. Do NOT hallucinate tool outputs.\n3. If a tool is available for the task, USE IT.\n4. After using a tool, report the result clearly.\n5. ALWAYS transfer back to the supervisor when done.\n\nYour job is ACTION, not planning. Execute tools immediately."
+    "auto_create_from_tools": true
   },
   "hitl_config": {
     "enabled": true,
@@ -222,16 +221,7 @@
       "browser_navigate",
       "browser_click",
       "browser_fill",
-      "browser_type",
-      "delete_*",
-      "write_*",
-      "create_*",
-      "execute_*",
-      "send_*",
-      "post_*",
-      "upload_*",
-      "run_*",
-      "python_executor"
+      "browser_type"
     ],
     "safe_tools": [
       "search_*",

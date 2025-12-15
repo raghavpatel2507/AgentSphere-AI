@@ -98,10 +98,6 @@
                 "auto_create_from_tools": {
                     "type": "boolean",
                     "default": true
-                },
-                "expert_template": {
-                    "type": "string",
-                    "description": "Template for generating expert system prompts"
                 }
             }
         },
