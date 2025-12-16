@@ -21,7 +21,8 @@
         "@playwright/mcp@latest"
       ],
       "enabled": true,
-      "expert_role": "You are a Playwright specialist with access to the user\u00e2\u20ac\u2122s Playwright MCP server. You can crawl websites, extract structured content, scrape pages, and transform web data according to user instructions."
+      "expert_role": "You are a Playwright specialist with access to the user\u00e2\u20ac\u2122s Playwright MCP server. You can crawl websites, extract structured content, scrape pages, and transform web data according to user instructions.",
+      "additional_instructions": "CRITICAL RULES:\n1. ALWAYS navigate to a URL before interacting with the page\n2. Use specific selectors to target elements\n3. Handle potential errors (e.g., element not found) gracefully\n4. Do not attempt to solve CAPTCHAs manually\n5. Use `get_page_content` to verify page state if unsure"
     },
     {
       "name": "firecrawl-mcp",
@@ -35,7 +36,8 @@
         "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
       },
       "enabled": true,
-      "expert_role": "You are a Firecrawl specialist with access to the user\u00e2\u20ac\u2122s Firecrawl MCP server. You can crawl websites, extract structured content, scrape pages, and transform web data according to user instructions."
+      "expert_role": "You are a Firecrawl specialist with access to the user\u00e2\u20ac\u2122s Firecrawl MCP server. You can crawl websites, extract structured content, scrape pages, and transform web data according to user instructions.",
+      "additional_instructions": "CRITICAL RULES:\n1. Define clear scope for crawling (depth, limit)\n2. Respect robots.txt and site policies\n3. Structure extracted data clearly\n4. Handle rate limits by adding delays if necessary\n5. Verify the URL is accessible before crawling"
     },
     {
       "name": "youtube",
@@ -49,18 +51,20 @@
         "YOUTUBE_API_KEY": "${YOUTUBE_API_KEY}"
       },
       "enabled": true,
-      "expert_role": "YouTube specialist for video search, details, comments, and summarization"
+      "expert_role": "YouTube specialist for video search, details, comments, and summarization",
+      "additional_instructions": "CRITICAL RULES:\n1. Use precise search queries to find relevant videos\n2. Do not hallucinate video content or transcripts\n5. Respect API quotas by limiting unnecessary calls"
     },
     {
       "name": "filesystem",
       "type": "python",
-      "command": "python",
+      "command": "python3",
       "args": [
         "src/mcp_servers/file-system-mcp-server/file-system-mcp-server/fs_server.py"
       ],
       "cwd": ".",
       "enabled": true,
-      "expert_role": "File system manager for reading, writing, and organizing files"
+      "expert_role": "File system manager for reading, writing, and organizing files",
+      "additional_instructions": "CRITICAL RULES:\n1. ALWAYS use ABSOLUTE paths for all file operations\n2. Verify file/directory existence before reading or writing\n3. Do NOT use `cd` to change directories; specify full paths instead\n4. Be careful with destructive operations (delete, overwrite)\n5. Use `list_directory` to explore structure if unsure"
     },
     {
       "name": "gmail",
@@ -74,7 +78,8 @@
         "--token",
         "src/configs/gmail_token.json"
       ],
-      "enabled": true
+      "enabled": true,
+      "additional_instructions": "CRITICAL RULES:\n1. ALWAYS verify the recipient's email address before sending\n2. Ensure the email body is not empty and contains relevant information\n3. If sending attachments, verify the file path exists first\n4. Use clear and descriptive subjects\n5. Do not send spam or unsolicited emails"
     },
     {
       "name": "github",
@@ -87,7 +92,7 @@
         "callback_port": 8080
       },
       "enabled": true,
-      "additional_instructions": "Always use GitHub MCP tools for all repo, branch, file, issue, and PR operations. Do not assume state—fetch before acting. Ask for clarification when repo/path is unclear. Confirm destructive actions. Keep responses short and structured. Next message must be a tool call when an action is needed."
+      "additional_instructions": "Always use GitHub MCP tools for all repo, branch, file, issue, and PR operations. Do not assume state—fetch before acting. Ask for clarification when repo/path is unclear. Confirm destructive actions. Keep responses short and structured. Next message must be a tool call when an action is needed. Do NOT attempt to handle non-GitHub tasks (like email, drive, etc.) - ignore them completely so the supervisor can route them."
     },
     {
       "name": "discord",
@@ -114,6 +119,7 @@
       },
       "enabled": true,
       "expert_role": "Zoho specialist for managing Zoho applications and data",
+      "additional_instructions": "CRITICAL WORKFLOWS:\n\n1. SENDING EMAILS:\n   - STEP 1: Call `ZohoMail_getMailAccounts` to get the `accountId` and `fromAddress`.\n   - STEP 2: Call `ZohoMail_sendEmail` using the retrieved `accountId`.\n\n2. SENDING CLIQ MESSAGES:\n   - STEP 1: Call `ZohoCliq_Retrieve_all_direct_chats` (with `limit=100`) to find the `chat_id` for the target user.\n   - STEP 2: Iterate through the results to find the chat where `owner.name` or `owner.email` matches the target.\n   - STEP 3: Call `ZohoCliq_Post_message_in_chat` using the found `chat_id`.\n   - IF NOT FOUND: Fail gracefully and ask the user for the Chat ID.\n\n3. GENERAL:\n   - NEVER invent IDs. Always look them up first.",
       "disabled_tools": []
     },
     {
@@ -142,7 +148,8 @@
         "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "${GOOGLE_DRIVE_OAUTH_CREDENTIALS}"
       },
       "enabled": true,
-      "expert_role": "Google Drive specialist for managing files, docs, sheets, and slides"
+      "expert_role": "Google Drive specialist for managing files, docs, sheets, and slides",
+      "additional_instructions": "SMART SEARCH STRATEGY:\n1. BROAD FIRST: Start with `name contains 'Query'`.\n2. IMMEDIATE FALLBACK: If search returns 0 results, YOU MUST call `listFolder` to view all files in the root directory.\n3. MANUAL FILTER: Read the output of `listFolder` to find the file you need (look for matching names or IDs).\n4. NEVER GIVE UP: If `search` fails, `listFolder` is your safety net. Use it!"
     },
     {
       "name": "powerpoint",
@@ -212,8 +219,7 @@
   ],
   "dynamic_experts": {
     "enabled": true,
-    "auto_create_from_tools": true,
-    "expert_template": "You are a {expert_role}.\n\nAvailable Tools:\n{tools}\n\nRULES:\n1. ALWAYS use the provided tools to answer user requests.\n2. Do NOT hallucinate tool outputs.\n3. If a tool is available for the task, USE IT.\n4. After using a tool, report the result clearly.\n5. ALWAYS transfer back to the supervisor when done.\n\nYour job is ACTION, not planning. Execute tools immediately."
+    "auto_create_from_tools": true
   },
   "hitl_config": {
     "enabled": true,
@@ -222,16 +228,7 @@
       "browser_navigate",
       "browser_click",
       "browser_fill",
-      "browser_type",
-      "delete_*",
-      "write_*",
-      "create_*",
-      "execute_*",
-      "send_*",
-      "post_*",
-      "upload_*",
-      "run_*",
-      "python_executor"
+      "browser_type"
     ],
     "safe_tools": [
       "search_*",
@@ -243,8 +240,8 @@
     ]
   },
   "llm": {
-    "provider": "openai",
-    "model": "gpt-4.1-mini",
+    "provider": "groq",
+    "model": "openai/gpt-oss-120b",
     "temperature": 0.5,
     "max_tokens": 800000
   }

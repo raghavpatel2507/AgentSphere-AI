@@ -168,14 +168,22 @@ class MCPManager:
 
     async def cleanup(self):
         """Disconnect all servers."""
-        if self._mcp_client:
-            try:
-                await self._mcp_client.close_all_sessions()
-            except Exception:
-                # Suppress "Attempted to exit cancel scope" from anyio/mcp-use
-                pass
-            self._mcp_client = None
-        self.server_sessions.clear()
+        # Suppress mcp_use warnings during cleanup
+        mcp_logger = logging.getLogger("mcp_use")
+        original_level = mcp_logger.level
+        mcp_logger.setLevel(logging.ERROR)
+        
+        try:
+            if self._mcp_client:
+                try:
+                    await self._mcp_client.close_all_sessions()
+                except Exception:
+                    # Suppress "Attempted to exit cancel scope" from anyio/mcp-use
+                    pass
+                self._mcp_client = None
+            self.server_sessions.clear()
+        finally:
+            mcp_logger.setLevel(original_level)
 
     def _create_args_schema(self, name: str, schema: Dict[str, Any]) -> Type[BaseModel]:
         """
@@ -224,6 +232,23 @@ class MCPManager:
                         field_type = List[bool]
                     elif item_type == "number":
                         field_type = List[float]
+                    elif item_type == "array":
+                        # Handle nested arrays (e.g. List[List[str]])
+                        sub_items = items.get("items", {})
+                        if not sub_items or not isinstance(sub_items, dict):
+                             field_type = List[List[str]]
+                        else:
+                             sub_item_type = sub_items.get("type")
+                             if sub_item_type == "string":
+                                 field_type = List[List[str]]
+                             elif sub_item_type == "integer":
+                                 field_type = List[List[int]]
+                             elif sub_item_type == "number":
+                                 field_type = List[List[float]]
+                             elif sub_item_type == "boolean":
+                                 field_type = List[List[bool]]
+                             else:
+                                 field_type = List[List[Any]]
                     elif item_type == "object":
                         if items.get("properties"):
                             try:

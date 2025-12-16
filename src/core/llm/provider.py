@@ -69,6 +69,20 @@ class GroqProvider(LLMProvider):
             max_retries=3
         )
 
+class OpenROuterProvider(LLMProvider):
+    def create_model(self, config: Dict[str, Any]) -> BaseChatModel:
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            raise ValueError("OPENROUTER_API_KEY not found in environment")
+           
+        return ChatOpenAI(
+            model=config.get("model", "gpt-4o"),
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            max_retries=3
+        )
+
+
 class LLMFactory:
     """Factory to create LLM instances based on configuration."""
     
@@ -80,7 +94,8 @@ class LLMFactory:
             "openai": OpenAIProvider(),
             "gemini": GeminiProvider(),
             "claude": ClaudeProvider(),
-            "groq": GroqProvider()
+            "groq": GroqProvider(),
+            "openrouter": OpenROuterProvider()
         }
         
         provider = providers.get(provider_name)

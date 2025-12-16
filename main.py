@@ -291,7 +291,7 @@ async def main():
                     raise
                 
                 # Only suppress non-interrupt streaming errors
-                # print(f"DEBUG: Suppressed streaming error: {type(e)} {e}")
+                print(f"DEBUG: Suppressed streaming error: {type(e)} {e}")
                 pass
             
             

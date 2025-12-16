@@ -12,7 +12,7 @@ def load_llm_config():
         "provider": os.getenv("LLM_PROVIDER", "openai"),
         "model": os.getenv("MODEL_NAME", "gpt-4o"),
         "temperature": 0.7,
-        "max_tokens": int(os.getenv("MAX_TOKENS", "100000"))
+        "max_tokens": int(os.getenv("MAX_TOKENS", "7000"))
     }
     
     try:
@@ -32,7 +32,7 @@ llm_config = load_llm_config()
 
 # Export constants
 MODEL_NAME = llm_config.get("model")
-MAX_TOKENS = llm_config.get("max_tokens", 100000)
+MAX_TOKENS = llm_config.get("max_tokens", 7000)
 
 # Initialize model
 try:
