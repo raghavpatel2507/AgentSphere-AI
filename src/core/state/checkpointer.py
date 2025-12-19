@@ -41,10 +41,9 @@ async def init_checkpointer() -> FilteredAsyncPostgresSaver:
         return _checkpointer
     
     # Get database URL from environment
-    database_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/agentsphere")
+    database_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:root@localhost:5432/agentsphere")
     
     # Convert asyncpg URL to psycopg format
-    # langgraph-checkpoint-postgres v3.x uses psycopg, not asyncpg
     psycopg_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
     
     # Create the filtered checkpointer context manager

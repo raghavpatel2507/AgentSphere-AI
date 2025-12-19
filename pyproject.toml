@@ -54,5 +54,6 @@ dependencies = [
     "xlsxwriter==3.2.9",
     "xxhash==3.6.0",
     "zstandard==0.25.0",
-    "mcp-use>=1.5.0",
+    "mcp-use[llm]>=1.5.0",
+    "streamlit>=1.52.1",
 ]
