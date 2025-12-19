@@ -109,6 +109,9 @@ async def main():
         print(f"   DEFAULT_USER_ID=550e8400-e29b-41d4-a716-446655440001\n")
         await mcp_manager.cleanup()
         return
+    except Exception as e:
+        print(f"\n❌ Initialization Error: {e}")
+        return
     
     # 4. Load History from DB
     history = await load_history(thread_id, tenant_id, user_id)
@@ -154,14 +157,27 @@ async def main():
                 print()
                 continue
             
-            # --- PLANNING PHASE ---
+            # --- PLANNING & EXECUTION PHASE ---
             print("\n🤔 Planning...", end="", flush=True)
             available_servers = await mcp_manager.get_all_tools_status()
-            plan = await planner.plan(user_input, history, available_servers)
             
-            # --- EXECUTION PHASE ---
+            plan = None
+            full_direct_response = ""
+            prefix_printed = False
+            
+            async for chunk in planner.plan(user_input, history, available_servers):
+                if isinstance(chunk, str):
+                    if not prefix_printed:
+                        print("\n🤖: ", end="", flush=True)
+                        prefix_printed = True
+                    print(chunk, end="", flush=True)
+                    full_direct_response += chunk
+                else:
+                    plan = chunk
+
             if plan.get("servers"):
-                print(f" Routing to servers: {', '.join(plan['servers'])}")
+                if not prefix_printed:
+                    print(f" Routing to servers: {', '.join(plan['servers'])}")
                 
                 # Instant Connection
                 await mcp_manager.connect_to_servers(plan['servers'])
@@ -171,65 +187,61 @@ async def main():
                 # Re-create agent to pick up new tools
                 agent = Agent(llm=llm, mcp_client=mcp_manager._mcp_client)
                 
-                print("\n🤔 Thinking and using tools...\n", flush=True)
+                if not prefix_printed:
+                    print("\n🤔 Thinking and using tools...\n", flush=True)
+                    print("\n🤖: ", end="", flush=True)
+                    prefix_printed = True
                 
                 from langchain_core.messages import HumanMessage, AIMessage
                 history.append(HumanMessage(content=user_input))
                 
-                full_response = ""
-                prefix_printed = False
+                full_agent_response = ""
                 async for chunk in agent.execute_streaming(user_input, history[:-1]):
-                    if isinstance(chunk, str) and chunk.strip():
-                        if not prefix_printed:
-                            print("\n🤖: ", end="", flush=True)
-                            prefix_printed = True
-                        
-                        # Smooth streaming for large chunks
-                        if len(chunk) > 20:
-                            for char in chunk:
-                                print(char, end="", flush=True)
-                                if char in [".", "!", "?", "\n"]:
-                                    await asyncio.sleep(0.01)
-                                else:
-                                    await asyncio.sleep(0.002)
-                        else:
-                            print(chunk, end="", flush=True)
-                            await asyncio.sleep(0.005)
-                            
-                        full_response += chunk
+                    if chunk:
+                        print(chunk, end="", flush=True)
+                        full_agent_response += chunk
                 
                 print("\n")
-                history.append(AIMessage(content=full_response))
+                history.append(AIMessage(content=full_agent_response))
             else:
-                print(" Direct response.")
-                from langchain_core.messages import HumanMessage, AIMessage
-                response = plan.get("response", "I'm not sure.")
-                history.append(HumanMessage(content=user_input))
-                history.append(AIMessage(content=response))
+                # Direct response already streamed from Planner if response was present
+                if not prefix_printed and plan.get("response"):
+                     print(f"\n🤖: {plan['response']}")
                 
-                print("\n🤖: ", end="", flush=True)
-                # Simulate streaming for direct response
-                for word in response.split(" "):
-                    print(word + " ", end="", flush=True)
-                    await asyncio.sleep(0.01)
                 print("\n")
+                from langchain_core.messages import HumanMessage, AIMessage
+                history.append(HumanMessage(content=user_input))
+                history.append(AIMessage(content=plan.get("response", full_direct_response)))
             
             # --- PERSISTENCE PHASE ---
             await save_history(thread_id, tenant_id, user_id, history)
 
         except KeyboardInterrupt:
             print("\n\n👋 Interrupted. Goodbye!")
-            await mcp_manager.cleanup()
             break
         except Exception as e:
-            print(f"\n❌ Error: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            # Suppress noisy cancel scope errors during turn processing
+            if "cancel scope" not in str(e):
+                print(f"\n❌ Error: {str(e)}")
+                import traceback
+                traceback.print_exc()
+        finally:
+             # Regular cleanup
+             pass
+             
+    # Final cleanup before exiting main()
+    try:
+        await mcp_manager.cleanup()
+    except Exception:
+        pass
 
 def custom_exception_handler(loop, context):
     exception = context.get("exception")
-    if exception and isinstance(exception, RuntimeError) and "cancel scope" in str(exception):
-        return
+    # Mask anyio/mcp-use internal cleanup noise
+    if exception and isinstance(exception, (RuntimeError, Exception)):
+        exc_str = str(exception)
+        if "cancel scope" in exc_str or "session" in exc_str:
+            return
     loop.default_exception_handler(context)
 
 if __name__ == "__main__":

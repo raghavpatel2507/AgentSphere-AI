@@ -27,11 +27,10 @@ class Planner:
             formatted.append(f"{role}: {msg.content}")
         return "\n".join(formatted)
 
-    async def plan(self, user_input: str, history: List[BaseMessage], available_servers: Dict[str, Any]) -> Dict[str, Any]:
+    async def plan(self, user_input: str, history: List[BaseMessage], available_servers: Dict[str, Any]):
         """
-        Plans the task by determining needed servers or a direct response.
+        Plans the task and yields either tokens (for direct response) or the final plan dict.
         """
-        
         # Enhanced Server Descriptions
         known_capabilities = {
             "github": "Access repositories, issues, PRs, and files on GitHub.",
@@ -49,7 +48,6 @@ class Planner:
         for name, info in available_servers.items():
             desc = info.get('description') or known_capabilities.get(name, 'No description available')
             server_descriptions.append(f"- {name}: {desc}")
-            
         server_text = "\n".join(server_descriptions)
 
         system_prompt = f"""You are the Task Router for AgentSphere-AI.
@@ -59,10 +57,10 @@ AVAILABLE MCP SERVERS:
 {server_text}
 
 RULES:
-1. **COMMON KNOWLEDGE**: If the user asks for general information (e.g., code, facts, general "how-to"), RESPOND DIRECTLY.
-2. **TOOL NECESSITY**: Only select MCP servers for real-time data or external service interaction (GitHub, Gmail, Zoho, etc.).
-3. If no tools are needed, provide a brief direct response in the "response" field. If the response is long (like code), you can set "response" to null and the system will handle it.
-4. Output MUST be valid JSON. No markdown formatting around the JSON.
+1. **COMMON KNOWLEDGE**: Respond directly for general info.
+2. **TOOL NECESSITY**: Only select MCP servers for real-time/external data.
+3. If the user is just chatting, respond directly.
+4. Output MUST be valid JSON.
 
 JSON FORMAT:
 {{
@@ -70,36 +68,78 @@ JSON FORMAT:
   "servers": ["list", "of", "server", "names", "if", "tools", "needed"]
 }}
 """
-
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"HISTORY:\n{self._format_history(history)}\n\nUSER QUERY: {user_input}"}
         ]
 
-        content = ""
+        full_content = ""
+        response_started = False
+        response_processed = False
+        
         try:
-            response = await self.llm.ainvoke(messages)
-            content = response.content
-            # Basic JSON cleanup
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-            
-            # Remove any leading/trailing non-JSON characters
-            content = content.strip()
-            if not content.startswith("{"):
-                start_idx = content.find("{")
-                if start_idx != -1:
-                    content = content[start_idx:]
-            if not content.endswith("}"):
-                end_idx = content.rfind("}")
-                if end_idx != -1:
-                    content = content[:end_idx+1]
+            async for chunk in self.llm.astream(messages):
+                content = chunk.content
+                if not content: continue
+                full_content += content
+                
+                if not response_processed:
+                    if not response_started:
+                        # Find "response": but ensure it's a field name, then look for the value's opening quote
+                        pattern = '"response":'
+                        if pattern in full_content:
+                            p_idx = full_content.find(pattern)
+                            # Check everything AFTER the pattern
+                            after_p = full_content[p_idx + len(pattern):]
+                            
+                            # Trim leading whitespace to see what the value looks like
+                            stripped_after = after_p.lstrip()
+                            if stripped_after.startswith('"'):
+                                # It's a string!
+                                response_started = True
+                                # Find where the actual value starts in the CURRENT chunk
+                                start_quote_global_pos = full_content.find('"', p_idx + len(pattern))
+                                start_val_global_pos = start_quote_global_pos + 1
+                                
+                                pre_chunk_len = len(full_content) - len(content)
+                                if start_val_global_pos < len(full_content):
+                                    take_from_chunk = max(0, start_val_global_pos - pre_chunk_len)
+                                    val_part = content[take_from_chunk:]
+                                    if '"' in val_part:
+                                        # Whole small response in one chunk?
+                                        msg, _ = val_part.split('"', 1)
+                                        if msg: yield msg
+                                        response_started = False
+                                        response_processed = True
+                                    elif val_part:
+                                        yield val_part
+                            elif stripped_after.startswith('n'): # "null"
+                                # It's null, skip streaming
+                                if len(stripped_after) >= 4: # fully "null"
+                                    response_processed = True
+                    else:
+                        # Already streaming, look for closing quote
+                        if '"' in content:
+                            msg, _ = content.split('"', 1)
+                            if msg: yield msg
+                            response_started = False
+                            response_processed = True
+                        else:
+                            yield content
 
-            plan_data = json.loads(content)
-            return plan_data
+            # Final cleanup and JSON parsing
+            clean_content = full_content
+            if "```json" in clean_content:
+                clean_content = clean_content.split("```json")[1].split("```")[0].strip()
+            elif "```" in clean_content:
+                clean_content = clean_content.split("```")[1].split("```")[0].strip()
+            
+            try:
+                plan_data = json.loads(clean_content)
+                yield plan_data
+            except Exception:
+                yield {"response": full_content, "servers": []}
+                
         except Exception as e:
             logger.error(f"Planning failed: {e}")
-            logger.error(f"Raw content that failed: {content}")
-            return {"response": None, "servers": []}
+            yield {"response": "I encountered an error planning your task.", "servers": []}
