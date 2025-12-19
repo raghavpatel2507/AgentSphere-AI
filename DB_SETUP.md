@@ -34,10 +34,11 @@ DEFAULT_TENANT_API_KEY=dev_api_key_12345
 Ensure your PostgreSQL server is running and create the database named `agentsphere`.
 
 ### Step B: Run Initial Setup
-The system will automatically attempt to initialize tables on startup. However, you can ensure the schema is ready by running:
+The system will automatically attempt to initialize tables on startup. However, the recommended way to ensure the schema and default seed data are ready is to run:
 ```bash
 alembic upgrade head
 ```
+This command will create all tables (`tenants`, `tenant_configs`, `conversations`, `messages`) and insert a default dev tenant.
 
 ## 4. How It Works
 
