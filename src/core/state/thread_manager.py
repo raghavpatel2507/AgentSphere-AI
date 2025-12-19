@@ -1,37 +1,48 @@
 """
-Thread and session management utilities for multi-tenant conversations.
+Thread and session management utilities.
 
-This module provides utilities for creating tenant-scoped thread IDs
-and managing conversation sessions.
+This module provides simple utilities for managing conversation threads
+and saving/loading message history from the database.
+
+SIMPLIFIED VERSION - Easy to understand!
 """
 
 import uuid
-from typing import Optional
+import json
+from pathlib import Path
+from typing import Optional, List
+from langchain_core.messages import BaseMessage
+from src.core.state.conversation_store import (
+    get_or_create_conversation,
+    load_messages,
+    messages_to_langchain,
+    save_message
+)
 
+
+# ============================================
+# Thread ID Management
+# ============================================
 
 def create_thread_id(tenant_id: str, conversation_id: Optional[str] = None) -> str:
     """
-    Create a tenant-scoped thread ID for LangGraph checkpointer.
+    Create a tenant-scoped thread ID.
     
     Format: tenant_{tenant_id}_thread_{conversation_id}
     
     Args:
-        tenant_id: The tenant identifier (UUID or string)
-        conversation_id: Optional conversation identifier. If not provided,
-                        a new UUID will be generated.
-    
+        tenant_id: The tenant identifier
+        conversation_id: Optional conversation identifier
+        
     Returns:
-        str: The tenant-scoped thread ID
+        Thread ID string
         
-    Examples:
-        >>> create_thread_id("550e8400-e29b-41d4-a716-446655440000", "conv_123")
-        'tenant_550e8400-e29b-41d4-a716-446655440000_thread_conv_123'
-        
-        >>> create_thread_id("default")
-        'tenant_default_thread_a1b2c3d4-...'
+    Example:
+        >>> create_thread_id("default", "abc123")
+        'tenant_default_thread_abc123'
     """
     if conversation_id is None:
-        conversation_id = str(uuid.uuid4())
+        conversation_id = str(uuid.uuid4())[:8]
     
     return f"tenant_{tenant_id}_thread_{conversation_id}"
 
@@ -44,14 +55,11 @@ def parse_thread_id(thread_id: str) -> tuple[str, str]:
         thread_id: The thread ID to parse
         
     Returns:
-        tuple[str, str]: (tenant_id, conversation_id)
+        Tuple of (tenant_id, conversation_id)
         
-    Raises:
-        ValueError: If thread_id format is invalid
-        
-    Examples:
-        >>> parse_thread_id("tenant_default_thread_conv_123")
-        ('default', 'conv_123')
+    Example:
+        >>> parse_thread_id("tenant_default_thread_abc123")
+        ('default', 'abc123')
     """
     if not thread_id.startswith("tenant_"):
         raise ValueError(f"Invalid thread_id format: {thread_id}")
@@ -66,104 +74,9 @@ def parse_thread_id(thread_id: str) -> tuple[str, str]:
     return tenant_id, conversation_id
 
 
-def get_config_for_thread(thread_id: str) -> dict:
-    """
-    Get LangGraph config dict for a given thread ID.
-    
-    Args:
-        thread_id: The thread ID
-        
-    Returns:
-        dict: Config dict with thread_id in configurable section
-        
-    Example:
-        >>> get_config_for_thread("tenant_default_thread_conv_123")
-        {'configurable': {'thread_id': 'tenant_default_thread_conv_123'}}
-    """
-    return {"configurable": {"thread_id": thread_id}}
-
-
-class SessionManager:
-    """
-    Manages conversation sessions for multi-tenant support.
-    
-    Provides utilities for creating, tracking, and managing
-    conversation sessions with tenant isolation.
-    """
-    
-    def __init__(self, tenant_id: str):
-        """
-        Initialize session manager for a specific tenant.
-        
-        Args:
-            tenant_id: The tenant identifier
-        """
-        self.tenant_id = tenant_id
-        self.active_sessions: dict[str, dict] = {}
-    
-    def create_session(self, conversation_id: Optional[str] = None) -> str:
-        """
-        Create a new conversation session.
-        
-        Args:
-            conversation_id: Optional conversation ID. If not provided,
-                           a new UUID will be generated.
-        
-        Returns:
-            str: The thread ID for the new session
-        """
-        thread_id = create_thread_id(self.tenant_id, conversation_id)
-        
-        self.active_sessions[thread_id] = {
-            "thread_id": thread_id,
-            "tenant_id": self.tenant_id,
-            "conversation_id": conversation_id or thread_id.split("_thread_")[1],
-            "created_at": None,  # Will be set when first message is sent
-            "last_activity": None,
-        }
-        
-        return thread_id
-    
-    def get_session(self, thread_id: str) -> Optional[dict]:
-        """
-        Get session information.
-        
-        Args:
-            thread_id: The thread ID
-            
-        Returns:
-            dict: Session information or None if not found
-        """
-        return self.active_sessions.get(thread_id)
-    
-    def end_session(self, thread_id: str):
-        """
-        End a conversation session.
-        
-        Args:
-            thread_id: The thread ID to end
-        """
-        if thread_id in self.active_sessions:
-            del self.active_sessions[thread_id]
-    
-    def list_sessions(self) -> list[dict]:
-        """
-        List all active sessions for this tenant.
-        
-        Returns:
-            list[dict]: List of session information dicts
-        """
-        return list(self.active_sessions.values())
-
-
 # ============================================
-# Session File Management for CLI
+# Session File Management (for CLI)
 # ============================================
-
-import json
-from pathlib import Path
-from typing import Optional
-
 
 def get_session_file_path() -> Path:
     """Get path to session file for storing current active thread."""
@@ -184,7 +97,6 @@ def save_current_session(thread_id: str, tenant_id: str):
     session_data = {
         "thread_id": thread_id,
         "tenant_id": tenant_id,
-        "last_active": None,  # Could add timestamp if needed
     }
     with open(session_file, "w") as f:
         json.dump(session_data, f, indent=2)
@@ -195,7 +107,7 @@ def load_current_session() -> Optional[dict]:
     Load current session from file.
     
     Returns:
-        dict with thread_id and tenant_id, or None if no session found
+        Dict with thread_id and tenant_id, or None if no session found
     """
     session_file = get_session_file_path()
     if not session_file.exists():
@@ -223,7 +135,7 @@ def get_or_create_session(tenant_id: str) -> tuple[str, bool]:
         tenant_id: The tenant ID
         
     Returns:
-        tuple of (thread_id, is_new_session)
+        Tuple of (thread_id, is_new_session)
     """
     # Try to load existing session
     session = load_current_session()
@@ -234,8 +146,120 @@ def get_or_create_session(tenant_id: str) -> tuple[str, bool]:
         return thread_id, False
     
     # Create new session
-    import uuid
     conversation_id = str(uuid.uuid4())[:8]
     thread_id = create_thread_id(tenant_id, conversation_id)
     save_current_session(thread_id, tenant_id)
     return thread_id, True
+
+
+# ============================================
+# Message History (Database)
+# ============================================
+
+async def load_history(
+    thread_id: str,
+    tenant_id: str,
+    user_id: str
+) -> List[BaseMessage]:
+    """
+    Load conversation history from database.
+    
+    This is SIMPLE:
+    1. Get or create conversation record
+    2. Load messages from database
+    3. Convert to LangChain format
+    
+    Args:
+        thread_id: Thread ID
+        tenant_id: Tenant UUID (as string)
+        user_id: User UUID (as string)
+        
+    Returns:
+        List of LangChain messages
+    """
+    try:
+        from uuid import UUID
+        
+        # Convert string UUIDs to UUID objects
+        tenant_uuid = UUID(tenant_id)
+        user_uuid = UUID(user_id)
+        
+        # Get or create conversation
+        conversation = await get_or_create_conversation(
+            tenant_uuid,
+            user_uuid,
+            thread_id
+        )
+        
+        # Load messages from database
+        db_messages = await load_messages(conversation.id)
+        
+        # Convert to LangChain format
+        langchain_messages = await messages_to_langchain(db_messages)
+        
+        return langchain_messages
+        
+    except Exception as e:
+        print(f"⚠️ Error loading history for {thread_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+
+async def save_history(
+    thread_id: str,
+    tenant_id: str,
+    user_id: str,
+    history: List[BaseMessage]
+):
+    """
+    Save conversation history to database.
+    
+    This is SIMPLE:
+    1. Get or create conversation record
+    2. Save new messages to database
+    
+    NOTE: We only save NEW messages (not already in DB).
+    To detect new messages, we compare with what's already loaded.
+    
+    Args:
+        thread_id: Thread ID
+        tenant_id: Tenant UUID (as string)
+        user_id: User UUID (as string)
+        history: List of LangChain messages to save
+    """
+    try:
+        from uuid import UUID
+        
+        # Convert string UUIDs to UUID objects
+        tenant_uuid = UUID(tenant_id)
+        user_uuid = UUID(user_id)
+        
+        # Get or create conversation
+        conversation = await get_or_create_conversation(
+            tenant_uuid,
+            user_uuid,
+            thread_id
+        )
+        
+        # Load existing messages to find what's new
+        db_messages = await load_messages(conversation.id)
+        existing_count = len(db_messages)
+        
+        # Save only NEW messages (those beyond existing count)
+        new_messages = history[existing_count:]
+        
+        for msg in new_messages:
+            # Determine role
+            role = 'USER' if msg.type == 'human' else 'ASSISTANT'
+            
+            # Save to database
+            await save_message(conversation.id, role, msg.content)
+        
+        if new_messages:
+            print(f"✅ Saved {len(new_messages)} new message(s) to database")
+            
+    except Exception as e:
+        print(f"⚠️ Error saving history for {thread_id}: {e}")
+        import traceback
+        traceback.print_exc()

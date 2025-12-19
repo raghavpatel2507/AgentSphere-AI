@@ -31,27 +31,12 @@ DEFAULT_TENANT_API_KEY=dev_api_key_12345
 ## 3. Database Initialization
 
 ### Step A: Create Database
-Ensure your PostgreSQL server is running and create the database:
-```bash
-createdb agentsphere
-```
+Ensure your PostgreSQL server is running and create the database named `agentsphere`.
 
-### Step B: Run Migrations
-Initialize the schema (tables for tenants, configs, etc.):
+### Step B: Run Initial Setup
+The system will automatically attempt to initialize tables on startup. However, you can ensure the schema is ready by running:
 ```bash
 alembic upgrade head
-```
-
-### Step C: Initialize Default Tenant
-Create the default tenant and thread for local testing:
-```bash
-python scripts/init_default_tenant.py
-```
-
-### Step D: Migrate Configurations (Optional)
-Move existing JSON configs (like `gmail_token.json`) to the database:
-```bash
-python scripts/migrate_configs_to_db.py
 ```
 
 ## 4. How It Works

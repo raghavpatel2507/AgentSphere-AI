@@ -85,21 +85,9 @@ This guide will help you set up the YouTube MCP server for AgentSphere-AI. You'l
    ls -l src/configs/youtube_token.pickle
    ```
 
-### 6. Enable YouTube MCP in Configuration
 
-1. Edit `mcp_config.json`:
-   ```json
-   {
-     "youtube_mcp": {
-       "enabled": true,
-       "description": "YouTube operations (search, video info, comments, summarization)"
-     }
-   }
-   ```
 
-2. Save the file
-
-### 7. Test the Integration
+### 6. Test the Integration
 
 1. Start AgentSphere-AI:
    ```bash
