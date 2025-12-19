@@ -8,12 +8,9 @@ in a normalized database schema (conversations and messages tables).
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
-from sqlalchemy.orm import declarative_base
+from src.core.config.database import Base
 from datetime import datetime, timezone
 import uuid
-
-# Create Base here to avoid circular import
-Base = declarative_base()
 
 
 class Conversation(Base):
