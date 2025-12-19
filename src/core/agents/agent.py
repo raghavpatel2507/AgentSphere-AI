@@ -32,60 +32,39 @@ class Agent:
 
     async def execute_streaming(self, user_input: str, history: List[BaseMessage]):
         """
-        Executes the agent and yields events for streaming.
+        Executes the agent and yields events for real-time streaming using stream_events.
         """
-        # Explicitly instruct the agent about available tools in this turn
         self.agent._conversation_history = history
         
         try:
-            # MCPAgent.stream yields tokens or dictionaries
-            async for chunk in self.agent.stream(user_input):
-                # 1. Direct string (token)
-                if isinstance(chunk, str):
-                    yield chunk
+            async for event in self.agent.stream_events(user_input):
+                kind = event["event"]
                 
-                # 2. Dictionary (LangGraph event or result)
-                elif isinstance(chunk, dict):
-                    # Check for direct keys
-                    found_content = False
-                    for key in ["content", "text", "token", "delta"]:
-                        if key in chunk and chunk[key]:
-                            val = chunk[key]
-                            if isinstance(val, str):
-                                yield val
-                                found_content = True
-                            elif isinstance(val, dict) and "content" in val:
-                                yield val["content"]
-                                found_content = True
-                    
-                    if found_content:
-                        continue
-
-                    # Check for nested messages (LangGraph/LangChain style)
-                    # If we find a full message at the end, we might have to simulate streaming
-                    # if it wasn't already streamed.
-                    if not found_content and "messages" in chunk:
-                        msgs = chunk["messages"]
-                        if isinstance(msgs, list) and len(msgs) > 0:
-                            last_msg = msgs[-1]
-                            if hasattr(last_msg, "content") and last_msg.content:
-                                yield str(last_msg.content)
+                # 1. Handle raw tokens from Chat Model (v1 & v2 events)
+                if kind in ["on_chat_model_stream", "on_llm_stream"]:
+                    data = event.get("data", {})
+                    chunk = data.get("chunk")
+                    if chunk:
+                        content = getattr(chunk, "content", chunk)
+                        if content:
+                            if isinstance(content, str):
+                                yield content
+                            elif isinstance(content, list):
+                                for part in content:
+                                    if isinstance(part, dict) and "text" in part:
+                                        yield part["text"]
+                                    elif isinstance(part, str):
+                                        yield part
                 
-                # 3. LangChain Chunk object
-                elif hasattr(chunk, "content"):
-                    content = chunk.content
-                    if isinstance(content, str):
-                        yield content
-                    elif isinstance(content, list):
-                        for item in content:
-                            if isinstance(item, dict) and "text" in item:
-                                yield item["text"]
-                            elif isinstance(item, str):
-                                yield item
+                # 2. Safety fallback for non-streaming models
+                elif kind == "on_chat_model_end":
+                    # If we missed tokens, the final result might be here
+                    pass 
 
         except GraphRecursionError:
             yield "⚠️ Task too complex or loop detected."
         except Exception as e:
+            logger.error(f"Streaming error: {e}")
             yield f"\n❌ Execution Error: {str(e)}"
 
     async def execute(self, user_input: str, history: List[BaseMessage]) -> List[BaseMessage]:

@@ -56,4 +56,5 @@ dependencies = [
     "zstandard==0.25.0",
     "mcp-use[llm]>=1.5.0",
     "streamlit>=1.52.1",
+    "nest-asyncio>=1.6.0",
 ]

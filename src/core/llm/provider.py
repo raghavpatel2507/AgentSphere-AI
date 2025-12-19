@@ -56,7 +56,8 @@ class GeminiProvider(LLMProvider):
             model=config.get("model", "gemini-1.5-pro"),
             temperature=config.get("temperature", 0.7),
             google_api_key=api_key,
-            max_retries=3
+            max_retries=3,
+            streaming=True
         )
 
 class ClaudeProvider(LLMProvider):
@@ -68,7 +69,8 @@ class ClaudeProvider(LLMProvider):
         return ChatAnthropic(
             model_name=config.get("model", "claude-3-sonnet-20240229"),
             temperature=config.get("temperature", 0.7),
-            anthropic_api_key=api_key
+            anthropic_api_key=api_key,
+            streaming=True
         )
 
 class GroqProvider(LLMProvider):
@@ -81,7 +83,8 @@ class GroqProvider(LLMProvider):
             model_name=config.get("model", "llama3-70b-8192"),
             temperature=config.get("temperature", 0.7),
             groq_api_key=api_key,
-            max_retries=3
+            max_retries=3,
+            streaming=True
         )
 
 class LLMFactory:

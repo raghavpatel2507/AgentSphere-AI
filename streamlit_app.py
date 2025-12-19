@@ -30,26 +30,25 @@ logging.getLogger("openai").setLevel(logging.WARNING)
 if os.name == 'nt':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+# nest_asyncio is REQUIRED for Streamlit + PostgreSQL (asyncpg)
 try:
     import nest_asyncio
     nest_asyncio.apply()
 except ImportError:
-    st.error("Please install nest_asyncio: pip install nest_asyncio")
-    st.stop()
+    st.warning("⚠️ `nest_asyncio` is missing. This is required for database stability in Streamlit. Please run: `pip install nest_asyncio`")
+    # We don't stop here, but it will likely crash during DB operations if not installed
 
-def get_event_loop():
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+@st.cache_resource
+def get_stable_loop():
+    """Create and return a stable event loop that persists across reruns."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     return loop
 
 def run_async(coro):
-    loop = get_event_loop()
+    loop = get_stable_loop()
+    # Ensure this loop is the current one for this thread
+    asyncio.set_event_loop(loop)
     return loop.run_until_complete(coro)
 
 # Project Modules
@@ -79,12 +78,15 @@ def init_session_state():
     if "initialized" not in st.session_state:
         st.session_state.initialized = False
         st.session_state.messages = []
+        st.session_state.history = []
         st.session_state.events = []
         st.session_state.thread_id = None
         st.session_state.planner = None
         st.session_state.agent = None
         st.session_state.mcp_manager = None
         st.session_state.is_processing = False
+        st.session_state.tenant_id = None
+        st.session_state.user_id = None
 
 async def initialize_app():
     await init_checkpointer()
@@ -95,21 +97,35 @@ async def initialize_app():
     llm = LLMFactory.load_config_and_create_llm()
     planner = Planner(api_key=os.getenv("OPENROUTER_API_KEY"))
     
-    tenant_id = os.getenv("DEFAULT_TENANT_ID", "default")
-    thread_id, is_new = get_or_create_session(tenant_id)
-    history = await load_history(thread_id)
+    # Use valid UUIDs for database compatibility (default tenant from migration)
+    tenant_id = os.getenv("DEFAULT_TENANT_ID", "00000000-0000-0000-0000-000000000001")
+    user_id = os.getenv("DEFAULT_USER_ID", "00000000-0000-0000-0000-000000000001")
     
-    return planner, manager, thread_id, history, is_new
+    thread_id, is_new = get_or_create_session(tenant_id)
+    history = await load_history(thread_id, tenant_id, user_id)
+    
+    return planner, manager, thread_id, history, is_new, tenant_id, user_id
 
-async def process_message_async(user_input: str, planner, mcp_manager, history, thread_id):
+async def process_message_async(user_input: str, planner, mcp_manager, history, thread_id, tenant_id, user_id):
     events = []
     full_response = ""
     
     try:
-        # Planning
+        # 1. PLANNING PHASE (with streaming support for direct response)
         available_servers = await mcp_manager.get_all_tools_status()
-        plan = await planner.plan(user_input, history, available_servers)
         
+        container = st.empty()
+        full_direct_response = ""
+        plan = None
+        
+        async for chunk in planner.plan(user_input, history, available_servers):
+            if isinstance(chunk, str):
+                full_direct_response += chunk
+                container.markdown(full_direct_response)
+            else:
+                plan = chunk
+        
+        # 2. EXECUTION PHASE
         if plan.get("servers"):
             events.append({"type": "info", "content": f"🔌 Connecting to: {', '.join(plan['servers'])}", "ts": datetime.now().strftime("%H:%M:%S")})
             
@@ -125,22 +141,27 @@ async def process_message_async(user_input: str, planner, mcp_manager, history, 
             from langchain_core.messages import HumanMessage, AIMessage
             history.append(HumanMessage(content=user_input))
             
-            # Streaming UI placeholder
-            container = st.empty()
+            # Continue streaming from the same container or a new one?
+            # Usually better to clear or use the same for continuity
+            full_agent_response = ""
             async for chunk in agent.execute_streaming(user_input, history[:-1]):
-                if isinstance(chunk, str):
-                    full_response += chunk
-                    container.markdown(full_response)
+                if chunk:
+                    full_agent_response += chunk
+                    container.markdown(full_agent_response)
             
+            full_response = full_agent_response
             history.append(AIMessage(content=full_response))
         else:
             from langchain_core.messages import HumanMessage, AIMessage
-            full_response = plan.get("response", "I can help with that.")
+            full_response = plan.get("response", full_direct_response) or "I can help with that."
+            # If it wasn't already streamed (unlikely), show it now
+            if not full_direct_response:
+                container.markdown(full_response)
+            
             history.append(HumanMessage(content=user_input))
             history.append(AIMessage(content=full_response))
-            st.markdown(full_response)
             
-        await save_history(thread_id, history)
+        await save_history(thread_id, tenant_id, user_id, history)
     except Exception as e:
         events.append({"type": "error", "content": str(e), "ts": datetime.now().strftime("%H:%M:%S")})
         full_response = f"Error: {e}"
@@ -180,7 +201,9 @@ def render_main_chat():
                 st.session_state.planner,
                 st.session_state.mcp_manager,
                 st.session_state.history,
-                st.session_state.thread_id
+                st.session_state.thread_id,
+                st.session_state.tenant_id,
+                st.session_state.user_id
             ))
             st.session_state.messages.append({"role": "assistant", "content": resp})
             st.session_state.history = hist
@@ -192,12 +215,14 @@ def main():
     
     if not st.session_state.initialized:
         with st.spinner("Initializing..."):
-            p, m, tid, hist, is_new = run_async(initialize_app())
+            p, m, tid, hist, is_new, tenant_id, user_id = run_async(initialize_app())
             st.session_state.planner = p
             st.session_state.mcp_manager = m
             st.session_state.thread_id = tid
             st.session_state.history = hist
-            st.session_state.messages = [{"role": "user" if m.type == "human" else "assistant", "content": m.content} for m in hist]
+            st.session_state.tenant_id = tenant_id
+            st.session_state.user_id = user_id
+            st.session_state.messages = [{"role": "user" if msg.type == "human" else "assistant", "content": msg.content} for msg in hist]
             st.session_state.initialized = True
             st.rerun()
             
