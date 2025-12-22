@@ -197,9 +197,18 @@ async def main():
                 
                 full_agent_response = ""
                 async for chunk in agent.execute_streaming(user_input, history[:-1]):
-                    if chunk:
+                    if isinstance(chunk, str):
                         print(chunk, end="", flush=True)
                         full_agent_response += chunk
+                    elif isinstance(chunk, dict):
+                        if chunk.get("event") == "approval_required":
+                            print(f"\n\n🛑 APPROVAL REQUIRED: {chunk['tool_name']}")
+                            print(f"Arguments: {chunk['tool_args']}")
+                            print(f"Message: {chunk['message']}")
+                            full_agent_response += f"\n[APPROVAL REQUIRED: {chunk['tool_name']}]"
+                        elif chunk.get("event") == "error":
+                            print(f"\n\n❌ ERROR: {chunk.get('message')}")
+                            full_agent_response += f"\n[ERROR: {chunk.get('message')}]"
                 
                 print("\n")
                 history.append(AIMessage(content=full_agent_response))

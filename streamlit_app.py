@@ -87,6 +87,7 @@ def init_session_state():
         st.session_state.is_processing = False
         st.session_state.tenant_id = None
         st.session_state.user_id = None
+        st.session_state.pending_approval = None
 
 async def initialize_app():
     await init_checkpointer()
@@ -145,9 +146,24 @@ async def process_message_async(user_input: str, planner, mcp_manager, history, 
             # Usually better to clear or use the same for continuity
             full_agent_response = ""
             async for chunk in agent.execute_streaming(user_input, history[:-1]):
-                if chunk:
+                if isinstance(chunk, str):
                     full_agent_response += chunk
                     container.markdown(full_agent_response)
+                elif isinstance(chunk, dict):
+                    if chunk.get("event") == "approval_required":
+                         # Store in session state and STOP this turn
+                         st.session_state.pending_approval = {
+                             "tool_name": chunk["tool_name"],
+                             "tool_args": chunk["tool_args"],
+                             "message": chunk["message"],
+                             "user_input": user_input, # Save to restart after approval
+                             "history_before": history[:-1] # Save state before this agent run
+                         }
+                         st.session_state.is_processing = False
+                         st.rerun()
+                    elif chunk.get("event") == "error":
+                         st.error(chunk.get("message"))
+                         full_agent_response += f"\n\n❌ {chunk.get('message')}"
             
             full_response = full_agent_response
             history.append(AIMessage(content=full_response))
@@ -208,6 +224,52 @@ def render_main_chat():
             st.session_state.messages.append({"role": "assistant", "content": resp})
             st.session_state.history = hist
             st.session_state.events.extend(evs)
+    
+    # HITL Approval UI Overlay
+    if st.session_state.pending_approval:
+        with st.chat_message("assistant"):
+            pa = st.session_state.pending_approval
+            st.warning(f"🛠️ **Approval Required**: `{pa['tool_name']}`")
+            st.json(pa['tool_args'])
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Approve", use_container_width=True):
+                    # Resume: Add whitelisted tool for JUST this next turn or inject as tool result
+                    # For "Pause & Resume via History", we need to inject a ToolMessage.
+                    # But MCPAgent manages history internally. 
+                    # The easiest way is to whitelist the tool for THIS session name.
+                    st.session_state.mcp_manager.whitelist_tool(pa['tool_name'])
+                    
+                    # Store variables for rerun
+                    u_input = pa['user_input']
+                    
+                    # Clear pending
+                    st.session_state.pending_approval = None
+                    
+                    # Trigger the same input again - but now it's whitelisted!
+                    # We append a hidden message or just re-run process_message_async
+                    resp, hist, evs = run_async(process_message_async(
+                        u_input, 
+                        st.session_state.planner,
+                        st.session_state.mcp_manager,
+                        st.session_state.history,
+                        st.session_state.thread_id,
+                        st.session_state.tenant_id,
+                        st.session_state.user_id
+                    ))
+                    st.session_state.messages.append({"role": "assistant", "content": resp})
+                    st.session_state.history = hist
+                    st.rerun()
+                    
+            with col2:
+                if st.button("❌ Reject", use_container_width=True):
+                    st.session_state.pending_approval = None
+                    st.error("Action rejected by user.")
+                    # Optional: Add "Action rejected" to history so agent knows
+                    from langchain_core.messages import AIMessage
+                    st.session_state.history.append(AIMessage(content="User rejected the tool execution."))
+                    st.rerun()
 
 def main():
     init_session_state()

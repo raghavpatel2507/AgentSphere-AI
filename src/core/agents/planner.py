@@ -74,8 +74,10 @@ JSON FORMAT:
         ]
 
         full_content = ""
+        yielded_len = 0
         response_started = False
         response_processed = False
+        start_char_idx = -1
         
         try:
             async for chunk in self.llm.astream(messages):
@@ -85,47 +87,56 @@ JSON FORMAT:
                 
                 if not response_processed:
                     if not response_started:
-                        # Find "response": but ensure it's a field name, then look for the value's opening quote
-                        pattern = '"response":'
-                        if pattern in full_content:
-                            p_idx = full_content.find(pattern)
-                            # Check everything AFTER the pattern
-                            after_p = full_content[p_idx + len(pattern):]
-                            
-                            # Trim leading whitespace to see what the value looks like
-                            stripped_after = after_p.lstrip()
-                            if stripped_after.startswith('"'):
-                                # It's a string!
-                                response_started = True
-                                # Find where the actual value starts in the CURRENT chunk
-                                start_quote_global_pos = full_content.find('"', p_idx + len(pattern))
-                                start_val_global_pos = start_quote_global_pos + 1
-                                
-                                pre_chunk_len = len(full_content) - len(content)
-                                if start_val_global_pos < len(full_content):
-                                    take_from_chunk = max(0, start_val_global_pos - pre_chunk_len)
-                                    val_part = content[take_from_chunk:]
-                                    if '"' in val_part:
-                                        # Whole small response in one chunk?
-                                        msg, _ = val_part.split('"', 1)
-                                        if msg: yield msg
-                                        response_started = False
+                        # 1. Search for "response": field
+                        if '"response":' in full_content:
+                            p_idx = full_content.find('"response":') + 11
+                            # Look ahead for opening quote or null
+                            after_field = full_content[p_idx:].lstrip()
+                            if after_field:
+                                if after_field.startswith('"'):
+                                    response_started = True
+                                    # start_char_idx is first char INSIDE the quotes
+                                    start_char_idx = full_content.find('"', p_idx) + 1
+                                    yielded_len = start_char_idx
+                                elif after_field.startswith('n'): # null
+                                    if "null" in after_field:
                                         response_processed = True
-                                    elif val_part:
-                                        yield val_part
-                            elif stripped_after.startswith('n'): # "null"
-                                # It's null, skip streaming
-                                if len(stripped_after) >= 4: # fully "null"
-                                    response_processed = True
-                    else:
-                        # Already streaming, look for closing quote
-                        if '"' in content:
-                            msg, _ = content.split('"', 1)
-                            if msg: yield msg
-                            response_started = False
-                            response_processed = True
-                        else:
-                            yield content
+                    
+                    if response_started and not response_processed:
+                        # 2. Extract tokens from the string, respecting escapes
+                        to_yield = ""
+                        curr_idx = yielded_len
+                        
+                        while curr_idx < len(full_content):
+                            c = full_content[curr_idx]
+                            
+                            if c == '\\':
+                                # Check if we have the escaped character yet
+                                if curr_idx + 1 < len(full_content):
+                                    esc = full_content[curr_idx + 1]
+                                    if esc == '"': to_yield += '"'
+                                    elif esc == 'n': to_yield += '\n'
+                                    elif esc == 'r': to_yield += '\r'
+                                    elif esc == 't': to_yield += '\t'
+                                    elif esc == '\\': to_yield += '\\'
+                                    else: to_yield += esc # literal fallback
+                                    curr_idx += 2
+                                    continue
+                                else:
+                                    # Trailing backslash, wait for next chunk
+                                    break
+                            
+                            if c == '"':
+                                # Terminator found
+                                response_processed = True
+                                break
+                            
+                            to_yield += c
+                            curr_idx += 1
+                        
+                        if to_yield:
+                            yield to_yield
+                            yielded_len = curr_idx
 
             # Final cleanup and JSON parsing
             clean_content = full_content
