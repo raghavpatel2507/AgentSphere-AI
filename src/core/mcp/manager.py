@@ -11,8 +11,58 @@ from langchain_core.tools import Tool, StructuredTool
 from langgraph.types import interrupt
 import fnmatch
 
+class ApprovalRequiredError(Exception):
+    """Raised when a tool call requires human approval."""
+    def __init__(self, tool_name: str, tool_args: Dict[str, Any], message: str):
+        self.tool_name = tool_name
+        self.tool_args = tool_args
+        self.message = message
+        super().__init__(self.message)
+
+# Import mcp-use middleware components
+from mcp_use.client.middleware.middleware import Middleware, MiddlewareContext
+
 
 logger = logging.getLogger(__name__)
+
+class ApprovalMiddleware(Middleware):
+    """Middleware to intercept sensitive tool calls and request approval."""
+    def __init__(self, manager: 'MCPManager'):
+        self.manager = manager
+
+    async def process_request(self, context: MiddlewareContext):
+        if context.request_type == "call_tool":
+            tool_name = context.params.get("name")
+            tool_args = context.params.get("arguments", {})
+            
+            # Check if this tool needs approval
+            hitl_config = self.manager.config_data.get("hitl_config", {})
+            if hitl_config.get("enabled", False):
+                mode = hitl_config.get("mode", "denylist")
+                sensitive_tools = hitl_config.get("sensitive_tools", [])
+                
+                requires_approval = False
+                if mode == "all":
+                    requires_approval = True
+                elif mode == "denylist":
+                    for pattern in sensitive_tools:
+                        if fnmatch.fnmatch(tool_name, pattern):
+                            requires_approval = True
+                            break
+                
+                # Check whitelist (bypass HITL if tool_name in whitelisted_tools)
+                if tool_name in self.manager.whitelisted_tools:
+                    requires_approval = False
+
+                if requires_approval:
+                    logger.info(f"🛑 HITL Approval Required via Middleware: {tool_name}")
+                    raise ApprovalRequiredError(
+                        tool_name=tool_name,
+                        tool_args=tool_args,
+                        message=hitl_config.get("approval_message", "Approve execution?")
+                    )
+        
+        return await context.next()
 
 class MCPManager:
     """
@@ -82,7 +132,11 @@ class MCPManager:
         """
         logger.info("Initializing MCP Manager (Deferred Mode)...")
         self.config_data = self.load_config()
-        self._mcp_client = MCPClient()
+        
+        # Initialize client with ApprovalMiddleware
+        self._mcp_client = MCPClient(
+            middleware=[ApprovalMiddleware(self)]
+        )
         # No server initialization here for instant startup
 
     async def connect_to_servers(self, server_names: List[str]):
@@ -203,7 +257,7 @@ class MCPManager:
             func=None,
             coroutine=_run,
             args_schema=args_schema,
-            handle_tool_error=False
+            handle_tool_error=True
         )
 
     def _create_args_schema(self, name: str, schema: Dict[str, Any]) -> Type[BaseModel]:
@@ -233,39 +287,11 @@ class MCPManager:
         return create_model(f"{name}Schema", **fields)
 
     async def _check_hitl_approval(self, tool_name: str, tool_args: dict):
-        """Check for HITL approval and trigger interrupt if needed."""
-        if tool_name in self.whitelisted_tools:
-            return
-
-        hitl_config = self.config_data.get("hitl_config", {})
-        if not hitl_config.get("enabled", False):
-            return
-
-        mode = hitl_config.get("mode", "denylist")
-        sensitive_tools = hitl_config.get("sensitive_tools", [])
-        
-        requires_approval = False
-        if mode == "all":
-            requires_approval = True
-        elif mode == "denylist":
-            for pattern in sensitive_tools:
-                if fnmatch.fnmatch(tool_name, pattern):
-                    requires_approval = True
-                    break
-
-        if requires_approval:
-            logger.info(f"Interrupting for HITL approval: {tool_name}")
-            user_decision = interrupt({
-                "event": "tool_approval_required",
-                "tool_name": tool_name,
-                "tool_args": tool_args,
-                "message": hitl_config.get("approval_message", "Approve execution?")
-            })
-            
-            if isinstance(user_decision, dict) and user_decision.get("action") == "reject":
-                 raise ValueError(f"User rejected execution of tool: {tool_name}")
-            elif isinstance(user_decision, str) and user_decision.lower() in ["n", "no", "reject"]:
-                 raise ValueError(f"User rejected execution of tool: {tool_name}")
+        """
+        Deprecated: HITL is now handled via ApprovalMiddleware.
+        Keep for internal logic if needed, but the primary guard is the middleware.
+        """
+        pass
 
     async def call_tool(self, tool_name: str, arguments: dict, server_name: str) -> Any:
         """Execute a tool call via the specified server session."""

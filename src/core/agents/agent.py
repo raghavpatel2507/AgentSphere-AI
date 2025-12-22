@@ -65,10 +65,20 @@ class Agent:
                     pass 
 
         except GraphRecursionError:
-            yield "⚠️ Task too complex or loop detected."
+            yield {"event": "error", "message": "⚠️ Task too complex or loop detected."}
         except Exception as e:
-            logger.error(f"Streaming error: {e}")
-            yield f"\n❌ Execution Error: {str(e)}"
+            from src.core.mcp.manager import ApprovalRequiredError
+            if isinstance(e, ApprovalRequiredError):
+                # Yield a structured event for the UI to handle
+                yield {
+                    "event": "approval_required",
+                    "tool_name": e.tool_name,
+                    "tool_args": e.tool_args,
+                    "message": e.message
+                }
+            else:
+                logger.error(f"Streaming error: {e}")
+                yield {"event": "error", "message": str(e)}
 
     async def execute(self, user_input: str, history: List[BaseMessage]) -> List[BaseMessage]:
         """
