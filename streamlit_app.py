@@ -10,6 +10,9 @@ import os
 import json
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+import requests
+import urllib.parse
+from urllib.parse import urlencode
 
 # Set page config first
 st.set_page_config(
@@ -39,17 +42,43 @@ except ImportError:
     # We don't stop here, but it will likely crash during DB operations if not installed
 
 @st.cache_resource
+def get_loop_factory():
+    """Returns a holder for the loop to allow mutability inside cache."""
+    return {"loop": None}
+
 def get_stable_loop():
     """Create and return a stable event loop that persists across reruns."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    return loop
+    holder = get_loop_factory()
+    if holder["loop"] is None or holder["loop"].is_closed():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        holder["loop"] = loop
+    return holder["loop"]
 
 def run_async(coro):
-    loop = get_stable_loop()
-    # Ensure this loop is the current one for this thread
-    asyncio.set_event_loop(loop)
-    return loop.run_until_complete(coro)
+    try:
+        loop = get_stable_loop()
+        # Ensure this loop is the current one for this thread
+        asyncio.set_event_loop(loop)
+        if loop.is_running():
+            # If we are already in a running loop (unlikely in Streamlit script runner, but possible if nested)
+            # using nested_asyncio we might be able to create a future?
+            # actually safe to simple run? not if loop is running.
+            # For now assume sync context calling async
+            import concurrent.futures
+            # If loop is running, we can't use run_until_complete.
+            # But Streamlit script execution is usually synchronous main thread.
+            pass
+        return loop.run_until_complete(coro)
+    except RuntimeError as e:
+        if "Event loop is closed" in str(e):
+             # Force recreate
+             holder = get_loop_factory()
+             loop = asyncio.new_event_loop()
+             asyncio.set_event_loop(loop)
+             holder["loop"] = loop
+             return loop.run_until_complete(coro)
+        raise e
 
 # Project Modules
 from src.core.agents.planner import Planner
@@ -111,24 +140,27 @@ async def process_message_async(user_input: str, planner, mcp_manager, history, 
     
     try:
         # 1. PLANNING PHASE (with streaming support for direct response)
-        available_servers = await mcp_manager.get_all_tools_status()
+        # Fetch status but filtering for Planner: Only show ENABLED servers
+        full_status = await mcp_manager.get_all_tools_status()
+        available_servers = {
+            k: v for k, v in full_status.items() 
+            if v.get("enabled", True)
+        }
         
-        container = st.empty()
+        # Main message container
+        message_container = st.empty()
         full_direct_response = ""
         plan = None
         
-        # Use a placeholder to clear the spinner as soon as output starts
-        planning_placeholder = st.empty()
-        with planning_placeholder.container():
-            with st.spinner("🧠 Thinking..."):
-                async for chunk in planner.plan(user_input, history, available_servers):
-                    if isinstance(chunk, str):
-                        planning_placeholder.empty() # Remove spinner
-                        full_direct_response += chunk
-                        container.markdown(full_direct_response)
-                    else:
-                        plan = chunk
-        planning_placeholder.empty()
+        # Planning visualization
+        with st.status("🧠 Thinking...", expanded=True) as plan_status:
+            async for chunk in planner.plan(user_input, history, available_servers):
+                if isinstance(chunk, str):
+                    full_direct_response += chunk
+                    message_container.markdown(full_direct_response)
+                else:
+                    plan = chunk
+            plan_status.update(label="🧠 Thought process complete", state="complete", expanded=False)
         
         # 2. EXECUTION PHASE
         if plan.get("servers"):
@@ -156,7 +188,7 @@ async def process_message_async(user_input: str, planner, mcp_manager, history, 
                 
                 if etype == "token":
                     full_agent_response += event["content"]
-                    container.markdown(full_agent_response)
+                    message_container.markdown(full_agent_response)
                 
                 elif etype == "tool_start":
                     t_name = event.get("tool")
@@ -197,7 +229,7 @@ async def process_message_async(user_input: str, planner, mcp_manager, history, 
             full_response = plan.get("response", full_direct_response) or "I can help with that."
             # If it wasn't already streamed (unlikely), show it now
             if not full_direct_response:
-                container.markdown(full_response)
+                message_container.markdown(full_response)
             
             history.append(HumanMessage(content=user_input))
             history.append(AIMessage(content=full_response))
@@ -209,6 +241,246 @@ async def process_message_async(user_input: str, planner, mcp_manager, history, 
         st.error(full_response)
         
     return full_response, history, events
+
+# -----------------------------------------------------------------------------
+# OAuth & Server Management Logic
+# -----------------------------------------------------------------------------
+def get_google_auth_url(client_id: str, redirect_uri: str, scopes: List[str]) -> str:
+    params = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "scope": " ".join(scopes),
+        "access_type": "offline",
+        "prompt": "consent",
+        "include_granted_scopes": "true",
+        "state": "google_drive_connect" 
+    }
+    return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+
+def exchange_google_code(code: str, client_id: str, client_secret: str, redirect_uri: str) -> Optional[Dict]:
+    token_url = "https://oauth2.googleapis.com/token"
+    data = {
+        "code": code,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code"
+    }
+    try:
+        response = requests.post(token_url, data=data)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Token exchange failed: {response.text}")
+            return None
+    except Exception as e:
+        st.error(f"Token exchange error: {e}")
+        return None
+
+async def handle_oauth_callback():
+    """Check for OAuth code in query params and handle server addition."""
+    # Use st.query_params (New Streamlit API)
+    query_params = st.query_params
+    code = query_params.get("code")
+    state = query_params.get("state")
+    
+    if code and state == "google_drive_connect":
+        st.toast("Processing Google Drive Connection...", icon="🔄")
+        
+        # We need credentials. Best effort: check Env or use what was saved in session
+        c_id = os.getenv("GOOGLE_CLIENT_ID") or st.session_state.get("temp_oauth_client_id")
+        c_secret = os.getenv("GOOGLE_CLIENT_SECRET") or st.session_state.get("temp_oauth_client_secret")
+        
+        if not c_id or not c_secret:
+            st.error("Missing Client ID/Secret for token exchange. Please add them to .env or settings.")
+            return
+
+        redirect_uri = "http://localhost:8501" # Default for local streamlit
+        
+        token_data = exchange_google_code(code, c_id, c_secret, redirect_uri)
+        
+        if token_data:
+            access_token = token_data.get("access_token")
+            
+            # Construct Google Drive Server Config
+            config = {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-gdrive"],
+                "env": {
+                    "GOOGLE_DRIVE_TOKEN": access_token 
+                }
+            }
+            
+            server_name = "google-drive"
+            if st.session_state.mcp_manager:
+                success = await st.session_state.mcp_manager.add_server(server_name, config)
+                if success:
+                    st.success("✅ Google Drive Connected Successfully!")
+                    st.query_params.clear()
+                    # Rerun to clear URL
+                    # st.rerun()
+                else:
+                    st.error("Failed to add server.")
+
+@st.dialog("Manage Servers")
+def render_server_manager_dialog():
+    st.subheader("Add / Manage Servers")
+    
+    tab1, tab2 = st.tabs(["Add Server", "Installed Servers"])
+    
+    with tab1:
+        st.markdown("#### Add New Server")
+        server_type = st.selectbox("Server Type", ["NPM / Node (stdio)", "Python (stdio)", "SSE (URL)", "Google Drive (OAuth)"])
+        
+        server_name = st.text_input("Server Name (unique)", value="my-server")
+        
+        if server_type == "Google Drive (OAuth)":
+            st.info("Connect to Google Drive using OAuth.")
+            c_id = st.text_input("Client ID", value=os.getenv("GOOGLE_CLIENT_ID", ""), type="password")
+            c_secret = st.text_input("Client Secret", value=os.getenv("GOOGLE_CLIENT_SECRET", ""), type="password")
+            
+            if st.button("Connect Google Drive"):
+                if not c_id or not c_secret:
+                    st.error("Client ID and Secret are required.")
+                else:
+                    # Save to session/env for callback
+                    st.session_state["temp_oauth_client_id"] = c_id
+                    st.session_state["temp_oauth_client_secret"] = c_secret
+                    
+                    # Redirect
+                    scope = ["https://www.googleapis.com/auth/drive.readonly"]
+                    redirect_uri = "http://localhost:8501"
+                    url = get_google_auth_url(c_id, redirect_uri, scope)
+                    st.link_button("👉 Click to Authorize", url)
+                    
+        elif server_type == "SSE (URL)":
+            url = st.text_input("Server URL", placeholder="http://localhost:3000/sse")
+            if st.button("Add Server"):
+                if not url:
+                    st.error("URL required")
+                else:
+                    config = {
+                        "url": url,
+                        "transport": "sse"
+                    }
+                    run_async(st.session_state.mcp_manager.add_server(server_name, config))
+                    st.success(f"Added {server_name}")
+                    st.rerun()
+                    
+        elif server_type == "NPM / Node (stdio)":
+            pkg = st.text_input("Package Name", placeholder="@modelcontextprotocol/server-filesystem")
+            args_str = st.text_input("Arguments (space separated)", placeholder=".")
+            env_str = st.text_area("Environment Variables (JSON)", value="{}")
+            
+            if st.button("Add Server"):
+                try:
+                    env_dict = json.loads(env_str)
+                    config = {
+                        "command": "npx",
+                        "args": ["-y", pkg] + args_str.split(),
+                        "env": env_dict
+                    }
+                    run_async(st.session_state.mcp_manager.add_server(server_name, config))
+                    st.success(f"Added {server_name}")
+                    st.rerun()
+                except Exception as e:
+                    st.error(str(e))
+
+        elif server_type == "Python (stdio)":
+            cmd = st.text_input("Command", value="python")
+            args_str = st.text_input("Arguments", placeholder="main.py")
+            env_str = st.text_area("Environment Vars (JSON)", value="{}")
+            
+            if st.button("Add Server"):
+                try:
+                    env_dict = json.loads(env_str)
+                    config = {
+                        "command": cmd,
+                        "args": args_str.split(),
+                        "env": env_dict
+                    }
+                    run_async(st.session_state.mcp_manager.add_server(server_name, config))
+                    st.success(f"Added {server_name}")
+                    st.rerun()
+                except Exception as e:
+                    st.error(str(e))
+
+    with tab2:
+        if st.session_state.mcp_manager:
+            status = run_async(st.session_state.mcp_manager.get_all_tools_status())
+            
+            for s_name, s_info in status.items():
+                is_enabled = s_info.get("enabled", True)
+                is_connected = s_info.get("connected", False)
+                
+                # Header Row
+                col_icon, col_name, col_status, col_toggle, col_del = st.columns([0.5, 3, 2, 1.5, 0.5])
+                
+                with col_icon:
+                    st.write("🟢" if is_connected else ("🔴" if not is_enabled else "⚪"))
+                
+                with col_name:
+                    st.markdown(f"**{s_name}**")
+                
+                with col_status:
+                    if is_connected:
+                        st.caption(f"{s_info['tools_count']} tools running")
+                    elif not is_enabled:
+                         st.caption("Disabled")
+                    else:
+                         st.caption("Disconnected (Idle)")
+                
+                with col_toggle:
+                    # Callback wrapper for server toggle
+                    def on_server_toggle(s_n=s_name):
+                        # Get new state from session state
+                        new_state = st.session_state.get(f"server_toggle_{s_n}")
+                        run_async(st.session_state.mcp_manager.toggle_server_status(s_n, new_state))
+
+                    st.toggle("Enable", value=is_enabled, key=f"server_toggle_{s_name}", 
+                             label_visibility="collapsed", on_change=on_server_toggle)
+
+                with col_del:
+                    def on_delete_server(s_n=s_name):
+                        run_async(st.session_state.mcp_manager.remove_server(s_n))
+                        
+                    st.button("🗑️", key=f"del_{s_name}", on_click=on_delete_server)
+                
+                # Drill Down for Tools
+                with st.expander(f"🛠️ Managed Tools ({s_name})"):
+                     # Inspect button if not connected standardly
+                     if not is_connected and is_enabled:
+                         def on_inspect(s_n=s_name):
+                             run_async(st.session_state.mcp_manager.inspect_server_tools(s_n))
+
+                         st.button(f"Inspect Tools for {s_name}", key=f"inspect_{s_name}", on_click=on_inspect)
+                     
+                     current_tools = s_info.get("tools", [])
+                     disabled_tools = s_info.get("disabled_tools", [])
+                     
+                     if current_tools:
+                         st.write("Toggle specific tools:")
+                         tool_cols = st.columns(3)
+                         for i, t_name in enumerate(current_tools):
+                             is_tool_enabled = t_name not in disabled_tools
+                             
+                             def on_tool_toggle(t_n=t_name, s_n=s_name):
+                                 # Current checkbox value
+                                 new_val = st.session_state.get(f"tool_cb_{s_n}_{t_n}")
+                                 run_async(st.session_state.mcp_manager.toggle_tool_status(t_n, new_val))
+
+                             with tool_cols[i % 3]:
+                                 st.checkbox(t_name, value=is_tool_enabled, 
+                                            key=f"tool_cb_{s_name}_{t_name}",
+                                            on_change=on_tool_toggle)
+                     else:
+                         if is_connected:
+                             st.info("No tools found on this server.")
+                         else:
+                             st.info("Connect or Inspect to see tools.")
+                
+                st.divider()
 
 def render_sidebar():
     with st.sidebar:
@@ -225,6 +497,10 @@ def render_sidebar():
             for s_name, s_info in status.items():
                 icon = "🟢" if s_info['connected'] else "🔴"
                 st.write(f"{icon} {s_name} ({s_info['tools_count']} tools)")
+                
+            st.markdown("---")
+            if st.button("⚙️ Manage Servers"):
+                render_server_manager_dialog()
 
 def render_main_chat():
     for message in st.session_state.messages:
@@ -260,8 +536,8 @@ def render_main_chat():
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("✅ Approve", use_container_width=True):
-                    # Resume: Add whitelisted tool for JUST this next turn or inject as tool result
-                    st.session_state.mcp_manager.whitelist_tool(pa['tool_name'])
+                    # Resume: Add whitelisted tool (name + args) for next execution
+                    st.session_state.mcp_manager.whitelist_tool(pa['tool_name'], pa['tool_args'])
                     
                     # Store variables for rerun
                     u_input = pa['user_input']
@@ -297,6 +573,28 @@ def render_main_chat():
                     st.rerun()
 
 def main():
+    # Handle OAuth Callback before anything else (if possible)
+    # Using st.query_params access
+    # We need a quick async loop for this if we want to add server
+    if "code" in st.query_params:
+        # Initialize minimal state if needed or just wait for full init
+         pass 
+
+    # HOT-FIX: Detect stale MCPManager (missing add_server) and force reload
+    if st.session_state.get("mcp_manager") and not hasattr(st.session_state.mcp_manager, 'add_server'):
+        st.warning("⚠️ Application updated: Reloading core components...")
+        import importlib
+        import src.core.mcp.manager
+        
+        # Force reload module
+        importlib.reload(src.core.mcp.manager)
+        
+        # Reset Singleton and Session State
+        src.core.mcp.manager.MCPManager._instance = None
+        st.session_state.mcp_manager = None
+        st.session_state.initialized = False
+        st.rerun() 
+
     init_session_state()
     load_custom_css()
     
@@ -312,6 +610,10 @@ def main():
             st.session_state.messages = [{"role": "user" if msg.type == "human" else "assistant", "content": msg.content} for msg in hist]
             st.session_state.initialized = True
             st.rerun()
+
+    # Process OAuth Callback now that manager is initialized
+    if "code" in st.query_params and st.session_state.mcp_manager:
+        run_async(handle_oauth_callback())
             
     render_sidebar()
     render_main_chat()
