@@ -49,7 +49,16 @@ class Agent:
                 
                 # 1. Handle tokens from the model
                 if kind == "on_chat_model_stream":
-                    content = event["data"].get("chunk", {}).content
+                    chunk = event["data"].get("chunk", {})
+                    # Safe access to content
+                    content = ""
+                    if hasattr(chunk, "content"):
+                        content = chunk.content
+                    elif isinstance(chunk, str):
+                        content = chunk
+                    elif isinstance(chunk, dict):
+                        content = chunk.get("content", "")
+                        
                     if content:
                         yield {"type": "token", "content": content}
                 

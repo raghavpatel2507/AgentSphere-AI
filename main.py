@@ -218,7 +218,7 @@ async def main():
                         
                         choice = input("\n✅ Approve execution? (y/n): ").strip().lower()
                         if choice == 'y':
-                            mcp_manager.whitelist_tool(event['tool_name'])
+                            mcp_manager.whitelist_tool(event['tool_name'], event['tool_args'])
                             print("🚀 Resuming execution...")
                             # Restart the generator with the SAME history and input
                             # The whitelist ensures it won't trigger again
@@ -233,7 +233,10 @@ async def main():
                                     print(f"\n🛠️ Calling tool: {sub_event.get('tool')}...")
                                 elif sex_type == "tool_end":
                                     print(f"✅ {sub_event.get('tool')} complete.")
-                            break # Exit the outer loop once resumed execution finishes
+                                elif sex_type == "error":
+                                    print(f"\n❌ Error during resumed execution: {sub_event.get('message')}")
+                                    full_agent_response += f"\n❌ Error: {sub_event.get('message')}"
+                            break
                         else:
                             print("❌ Execution rejected.")
                             full_agent_response += f"\n[User rejected execution of {event['tool_name']}]"

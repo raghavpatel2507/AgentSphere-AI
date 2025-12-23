@@ -9,8 +9,6 @@ from .database import (
     get_sync_session,
     init_db,
     close_db,
-    get_asyncpg_pool,
-    close_asyncpg_pool,
     Tenant,
     TenantConfig,
 )
@@ -24,8 +22,6 @@ __all__ = [
     "get_sync_session",
     "init_db",
     "close_db",
-    "get_asyncpg_pool",
-    "close_asyncpg_pool",
     "Tenant",
     "TenantConfig",
 ]
