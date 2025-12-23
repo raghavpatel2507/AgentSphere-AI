@@ -8,7 +8,7 @@ AgentSphere-AI is a high-performance agentic system designed for multi-tool orch
   1. **Planner**: Analyzes intent and routes to specific MCP servers.
   2. **Agent**: Proactively executes tools with self-healing and loop protection.
 - **Universal MCP Management**: Powered by `mcp-use`, supporting dynamic server connection, tool discovery, and high-level orchestration.
-- **PostgreSQL Persistence**: Full state management using LangGraph checkpointers with automatic signature filtering to save tokens and DB space.
+- **PostgreSQL Persistence**: Full conversation history management using normalized `conversations` and `messages` tables for efficient multi-tenant storage.
 - **Real-time Streaming**: Token-by-token streaming for all responses, including tool-heavy tasks.
 - **Instant Connection**: Only connects to the necessary MCP servers for the current task, ensuring rapid startup.
 
@@ -30,10 +30,10 @@ Orchestrates connections to external services defined in `multi_server_config.js
 - **Deferred Connection**: Servers are only started when the Planner requires them.
 - **HITL Integration**: Support for Human-In-The-Loop approval for sensitive tools.
 
-### 4. Persistence (`src/core/state/thread_manager.py`)
+### 4. Persistence (`src/core/state/`)
 Handles saving and loading conversation history to a PostgreSQL backend.
 - **Thread Isolation**: Conversations are isolated by `thread_id` and `tenant_id`.
-- **Checkpointing**: Reliable state recovery via LangGraph `AsyncPostgresSaver`.
+- **Direct Database Storage**: Messages stored in normalized `conversations` and `messages` tables via `conversation_store.py`.
 
 ## 🛠️ Configuration
 
