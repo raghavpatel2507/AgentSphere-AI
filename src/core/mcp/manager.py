@@ -31,15 +31,20 @@ class ApprovalMiddleware(Middleware):
         self.manager = manager
 
     async def process_request(self, context: MiddlewareContext):
+        # DEBUG: Trace request
+        # print(f"DEBUG: Middleware request: {context.request_type}")
         if context.request_type == "call_tool":
             tool_name = context.params.get("name")
             tool_args = context.params.get("arguments", {})
+            print(f"DEBUG: HITL Middleware checking tool: {tool_name}")
             
             # Check if this tool needs approval
             hitl_config = self.manager.config_data.get("hitl_config", {})
             if hitl_config.get("enabled", False):
                 mode = hitl_config.get("mode", "denylist")
                 sensitive_tools = hitl_config.get("sensitive_tools", [])
+                
+                # print(f"DEBUG: HITL mode={mode}, sensitive_tools={sensitive_tools}")
                 
                 requires_approval = False
                 if mode == "all":
@@ -48,10 +53,12 @@ class ApprovalMiddleware(Middleware):
                     for pattern in sensitive_tools:
                         if fnmatch.fnmatch(tool_name, pattern):
                             requires_approval = True
+                            print(f"DEBUG: Tool {tool_name} matched pattern {pattern}")
                             break
                 
                 # Check whitelist (bypass HITL if tool_name in whitelisted_tools)
                 if tool_name in self.manager.whitelisted_tools:
+                    print(f"DEBUG: Tool {tool_name} is in whitelist. Bypassing HITL.")
                     requires_approval = False
 
                 if requires_approval:
@@ -145,7 +152,9 @@ class MCPManager:
         Implementation of the 'Plan-first, Connect-later' pattern.
         """
         if not self._mcp_client:
-            self._mcp_client = MCPClient()
+            self._mcp_client = MCPClient(
+                middleware=[ApprovalMiddleware(self)]
+            )
             
         mcp_servers = self.config_data.get("mcpServers", {})
         init_tasks = []
@@ -247,7 +256,7 @@ class MCPManager:
         args_schema = self._create_args_schema(tool.name, getattr(tool, "inputSchema", {}))
         
         async def _run(**kwargs):
-            # HITL Wrapper Logic
+            # HITL Wrapper Logic (Middleware will also catch this if we use client.call_tool)
             await self._check_hitl_approval(tool.name, kwargs)
             return await self.call_tool(tool.name, kwargs, server_name=server_name)
 
@@ -288,13 +297,41 @@ class MCPManager:
 
     async def _check_hitl_approval(self, tool_name: str, tool_args: dict):
         """
-        Deprecated: HITL is now handled via ApprovalMiddleware.
-        Keep for internal logic if needed, but the primary guard is the middleware.
+        Manual HITL check as a backup to middleware.
         """
-        pass
+        hitl_config = self.config_data.get("hitl_config", {})
+        print(f"DEBUG: Manual HITL check for {tool_name}. Enabled: {hitl_config.get('enabled')}")
+        if not hitl_config.get("enabled", False):
+            return
+
+        # If already whitelisted, bypass
+        if tool_name in self.whitelisted_tools:
+            print(f"DEBUG: Tool {tool_name} whitelisted.")
+            return
+
+        mode = hitl_config.get("mode", "denylist")
+        sensitive_tools = hitl_config.get("sensitive_tools", [])
+        
+        requires_approval = False
+        if mode == "all":
+            requires_approval = True
+        elif mode == "denylist":
+            for pattern in sensitive_tools:
+                if fnmatch.fnmatch(tool_name, pattern):
+                    requires_approval = True
+                    print(f"DEBUG: Manual HITL match for {tool_name} with {pattern}")
+                    break
+        
+        if requires_approval:
+            logger.info(f"🛑 HITL Approval Required via Manual Check: {tool_name}")
+            raise ApprovalRequiredError(
+                tool_name=tool_name,
+                tool_args=tool_args,
+                message=hitl_config.get("approval_message", "Approve execution?")
+            )
 
     async def call_tool(self, tool_name: str, arguments: dict, server_name: str) -> Any:
-        """Execute a tool call via the specified server session."""
+        """Execute a tool call via the session."""
         session = self.server_sessions.get(server_name)
         if not session:
              raise ValueError(f"Server {server_name} not connected.")
@@ -302,6 +339,9 @@ class MCPManager:
         try:
             result = await session.call_tool(tool_name, arguments)
             return self._process_tool_result(result)
+        except ApprovalRequiredError:
+            # Re-raise for the agent to catch
+            raise
         except Exception as e:
             error_msg = str(e)
             logger.error(f"Tool execution failed: {tool_name} - {error_msg}")

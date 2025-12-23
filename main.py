@@ -184,8 +184,11 @@ async def main():
                 if mcp_manager._mcp_client:
                     mcp_manager._mcp_client.allowed_servers = list(plan['servers'])
                 
-                # Re-create agent to pick up new tools
-                agent = Agent(llm=llm, mcp_client=mcp_manager._mcp_client)
+                # Get wrapped tools (with HITL guards)
+                tools = await mcp_manager.get_tools_for_servers(plan['servers'])
+                
+                # Re-create agent with wrapped tools
+                agent = Agent(llm=llm, mcp_client=mcp_manager._mcp_client, tools=tools)
                 
                 if not prefix_printed:
                     print("\n🤔 Thinking and using tools...\n", flush=True)
@@ -196,19 +199,50 @@ async def main():
                 history.append(HumanMessage(content=user_input))
                 
                 full_agent_response = ""
-                async for chunk in agent.execute_streaming(user_input, history[:-1]):
-                    if isinstance(chunk, str):
-                        print(chunk, end="", flush=True)
-                        full_agent_response += chunk
-                    elif isinstance(chunk, dict):
-                        if chunk.get("event") == "approval_required":
-                            print(f"\n\n🛑 APPROVAL REQUIRED: {chunk['tool_name']}")
-                            print(f"Arguments: {chunk['tool_args']}")
-                            print(f"Message: {chunk['message']}")
-                            full_agent_response += f"\n[APPROVAL REQUIRED: {chunk['tool_name']}]"
-                        elif chunk.get("event") == "error":
-                            print(f"\n\n❌ ERROR: {chunk.get('message')}")
-                            full_agent_response += f"\n[ERROR: {chunk.get('message')}]"
+                async for event in agent.execute_streaming(user_input, history[:-1]):
+                    etype = event.get("type")
+                    
+                    if etype == "token":
+                        content = event.get("content", "")
+                        print(content, end="", flush=True)
+                        full_agent_response += content
+                    
+                    elif etype == "tool_start":
+                        t_name = event.get("tool")
+                        print(f"\n🛠️ Calling tool: {t_name}...")
+                    
+                    elif etype == "tool_end":
+                        t_name = event.get("tool")
+                        print(f"✅ {t_name} complete.")
+                    
+                    elif etype == "approval_required":
+                        print(f"\n\n🛑 APPROVAL REQUIRED: {event['tool_name']}")
+                        print(f"Arguments: {event['tool_args']}")
+                        print(f"Message: {event['message']}")
+                        
+                        choice = input("\n✅ Approve execution? (y/n): ").strip().lower()
+                        if choice == 'y':
+                            mcp_manager.whitelist_tool(event['tool_name'])
+                            print("🚀 Resuming execution...")
+                            # Restart the generator with the SAME history and input
+                            # The whitelist ensures it won't trigger again
+                            full_agent_response = ""
+                            async for sub_event in agent.execute_streaming(user_input, history[:-1]):
+                                sex_type = sub_event.get("type")
+                                if sex_type == "token":
+                                    content = sub_event.get("content", "")
+                                    print(content, end="", flush=True)
+                                    full_agent_response += content
+                                elif sex_type == "tool_start":
+                                    print(f"\n🛠️ Calling tool: {sub_event.get('tool')}...")
+                                elif sex_type == "tool_end":
+                                    print(f"✅ {sub_event.get('tool')} complete.")
+                            break # Exit the outer loop once resumed execution finishes
+                        else:
+                            print("❌ Execution rejected.")
+                            full_agent_response += f"\n[User rejected execution of {event['tool_name']}]"
+                            # We stop here for this turn
+                            break
                 
                 print("\n")
                 history.append(AIMessage(content=full_agent_response))
