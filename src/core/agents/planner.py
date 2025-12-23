@@ -61,6 +61,7 @@ RULES:
 2. **TOOL NECESSITY**: Only select MCP servers for real-time/external data.
 3. If the user is just chatting, respond directly.
 4. Output MUST be valid JSON.
+5. **STRICT EXCLUSIVITY**: If `servers` is not empty, `response` MUST be `null`. Never provide a preamble like "I will help you...". Just select the server and let the agent handle everything.
 
 JSON FORMAT:
 {{

@@ -119,51 +119,78 @@ async def process_message_async(user_input: str, planner, mcp_manager, history, 
         full_direct_response = ""
         plan = None
         
-        async for chunk in planner.plan(user_input, history, available_servers):
-            if isinstance(chunk, str):
-                full_direct_response += chunk
-                container.markdown(full_direct_response)
-            else:
-                plan = chunk
+        # Use a placeholder to clear the spinner as soon as output starts
+        planning_placeholder = st.empty()
+        with planning_placeholder.container():
+            with st.spinner("🧠 Thinking..."):
+                async for chunk in planner.plan(user_input, history, available_servers):
+                    if isinstance(chunk, str):
+                        planning_placeholder.empty() # Remove spinner
+                        full_direct_response += chunk
+                        container.markdown(full_direct_response)
+                    else:
+                        plan = chunk
+        planning_placeholder.empty()
         
         # 2. EXECUTION PHASE
         if plan.get("servers"):
-            events.append({"type": "info", "content": f"🔌 Connecting to: {', '.join(plan['servers'])}", "ts": datetime.now().strftime("%H:%M:%S")})
+            with st.spinner("🔌 Initiating Agents..."):
+                await mcp_manager.connect_to_servers(plan['servers'])
+                if mcp_manager._mcp_client:
+                    mcp_manager._mcp_client.allowed_servers = list(plan['servers'])
             
-            # Instant Connection
-            await mcp_manager.connect_to_servers(plan['servers'])
-            if mcp_manager._mcp_client:
-                mcp_manager._mcp_client.allowed_servers = list(plan['servers'])
-                
             # EXECUTION: Refresh agent every turn
             llm = LLMFactory.load_config_and_create_llm()
-            agent = Agent(llm=llm, mcp_client=mcp_manager._mcp_client)
+            # Get wrapped tools (with HITL guards)
+            tools = await mcp_manager.get_tools_for_servers(plan['servers'])
+            agent = Agent(llm=llm, mcp_client=mcp_manager._mcp_client, tools=tools)
             
             from langchain_core.messages import HumanMessage, AIMessage
             history.append(HumanMessage(content=user_input))
             
-            # Continue streaming from the same container or a new one?
-            # Usually better to clear or use the same for continuity
             full_agent_response = ""
-            async for chunk in agent.execute_streaming(user_input, history[:-1]):
-                if isinstance(chunk, str):
-                    full_agent_response += chunk
+            
+            # Status container for tool tracking
+            status = st.status("🤖 Agent is working...", expanded=True)
+            
+            async for event in agent.execute_streaming(user_input, history[:-1]):
+                etype = event.get("type")
+                
+                if etype == "token":
+                    full_agent_response += event["content"]
                     container.markdown(full_agent_response)
-                elif isinstance(chunk, dict):
-                    if chunk.get("event") == "approval_required":
-                         # Store in session state and STOP this turn
-                         st.session_state.pending_approval = {
-                             "tool_name": chunk["tool_name"],
-                             "tool_args": chunk["tool_args"],
-                             "message": chunk["message"],
-                             "user_input": user_input, # Save to restart after approval
-                             "history_before": history[:-1] # Save state before this agent run
-                         }
-                         st.session_state.is_processing = False
-                         st.rerun()
-                    elif chunk.get("event") == "error":
-                         st.error(chunk.get("message"))
-                         full_agent_response += f"\n\n❌ {chunk.get('message')}"
+                
+                elif etype == "tool_start":
+                    t_name = event.get("tool")
+                    status.update(label=f"🛠️ Tool: `{t_name}`")
+                    with status:
+                        with st.expander(f"Parameters: `{t_name}`", expanded=False):
+                            st.json(event.get("inputs", {}))
+                
+                elif etype == "tool_end":
+                    t_name = event.get("tool")
+                    status.update(label=f"✅ `{t_name}` finished.")
+                    with status:
+                        with st.expander(f"Result: `{t_name}`", expanded=False):
+                            st.markdown(event.get("output", "Done"))
+                
+                elif etype == "approval_required":
+                    # Store in session state and STOP this turn
+                    st.session_state.pending_approval = {
+                        "tool_name": event["tool_name"],
+                        "tool_args": event["tool_args"],
+                        "message": event["message"],
+                        "user_input": user_input, 
+                        "history_before": history[:-1]
+                    }
+                    st.session_state.is_processing = False
+                    st.rerun()
+                
+                elif etype == "error":
+                    st.error(event.get("message"))
+                    full_agent_response += f"\n\n❌ {event.get('message')}"
+            
+            status.update(label="✨ Task Complete", state="complete", expanded=False)
             
             full_response = full_agent_response
             history.append(AIMessage(content=full_response))
@@ -236,9 +263,6 @@ def render_main_chat():
             with col1:
                 if st.button("✅ Approve", use_container_width=True):
                     # Resume: Add whitelisted tool for JUST this next turn or inject as tool result
-                    # For "Pause & Resume via History", we need to inject a ToolMessage.
-                    # But MCPAgent manages history internally. 
-                    # The easiest way is to whitelist the tool for THIS session name.
                     st.session_state.mcp_manager.whitelist_tool(pa['tool_name'])
                     
                     # Store variables for rerun
@@ -247,20 +271,23 @@ def render_main_chat():
                     # Clear pending
                     st.session_state.pending_approval = None
                     
-                    # Trigger the same input again - but now it's whitelisted!
-                    # We append a hidden message or just re-run process_message_async
-                    resp, hist, evs = run_async(process_message_async(
-                        u_input, 
-                        st.session_state.planner,
-                        st.session_state.mcp_manager,
-                        st.session_state.history,
-                        st.session_state.thread_id,
-                        st.session_state.tenant_id,
-                        st.session_state.user_id
-                    ))
-                    st.session_state.messages.append({"role": "assistant", "content": resp})
-                    st.session_state.history = hist
-                    st.rerun()
+                    # Trigger the SAME turn again
+                    # The middleware will now skip this tool because it's whitelisted
+                    # This is the "Pause & Resume via Whitelist" pattern
+                    with st.status("🚀 Resuming...", expanded=True) as status:
+                        resp, hist, evs = run_async(process_message_async(
+                            u_input, 
+                            st.session_state.planner,
+                            st.session_state.mcp_manager,
+                            st.session_state.history,
+                            st.session_state.thread_id,
+                            st.session_state.tenant_id,
+                            st.session_state.user_id
+                        ))
+                        # We need to manually append to messages here because we outside the main loop
+                        st.session_state.messages.append({"role": "assistant", "content": resp})
+                        st.session_state.history = hist
+                        st.rerun()
                     
             with col2:
                 if st.button("❌ Reject", use_container_width=True):

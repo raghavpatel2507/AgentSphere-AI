@@ -1,9 +1,9 @@
 import logging
 from typing import List, Optional, Any
 from langchain_core.messages import BaseMessage
-from mcp_use.agents import MCPAgent
-from mcp_use.client import MCPClient
+from langgraph.prebuilt import create_react_agent
 from langgraph.errors import GraphRecursionError
+from mcp_use.client import MCPClient
 
 logger = logging.getLogger(__name__)
 
@@ -18,73 +18,80 @@ AGENT_SYSTEM_PROMPT = """YOU ARE A PROACTIVE, HIGH-EXECUTION MULTI-TOOL AGENT.
 
 class Agent:
     """
-    Orchestrates the MCPAgent execution with safety boundaries and history management.
+    Orchestrates the ReAct execution with safety boundaries and history management.
     """
     
-    def __init__(self, llm: Any, mcp_client: MCPClient):
-        self.agent = MCPAgent(
-            llm=llm,
-            client=mcp_client,
-            use_server_manager=False,
-            max_steps=50, # Increased for complex 2.0 flows
-            system_prompt=AGENT_SYSTEM_PROMPT
+    def __init__(self, llm: Any, mcp_client: MCPClient, tools: Optional[List[Any]] = None):
+        self._tools = tools or []
+        self._llm = llm
+        self.agent = create_react_agent(
+            model=llm,
+            tools=self._tools,
+            prompt=AGENT_SYSTEM_PROMPT
         )
 
     async def execute_streaming(self, user_input: str, history: List[BaseMessage]):
         """
-        Executes the agent and yields events for real-time streaming using stream_events.
+        Executes the agent and yields structured events for real-time streaming.
+        Uses LangGraph's astream_events for granular tracking.
         """
-        self.agent._conversation_history = history
-        
         try:
-            async for event in self.agent.stream_events(user_input):
+            config = {"configurable": {"thread_id": "temporary"}} # Not using checkpointer here for turn-based state
+            
+            async for event in self.agent.astream_events(
+                {"messages": history + [("user", user_input)]}, 
+                version="v2"
+            ):
                 kind = event["event"]
                 
-                # 1. Handle raw tokens from Chat Model (v1 & v2 events)
-                if kind in ["on_chat_model_stream", "on_llm_stream"]:
-                    data = event.get("data", {})
-                    chunk = data.get("chunk")
-                    if chunk:
-                        content = getattr(chunk, "content", chunk)
-                        if content:
-                            if isinstance(content, str):
-                                yield content
-                            elif isinstance(content, list):
-                                for part in content:
-                                    if isinstance(part, dict) and "text" in part:
-                                        yield part["text"]
-                                    elif isinstance(part, str):
-                                        yield part
+                # 1. Handle tokens from the model
+                if kind == "on_chat_model_stream":
+                    content = event["data"].get("chunk", {}).content
+                    if content:
+                        yield {"type": "token", "content": content}
                 
-                # 2. Safety fallback for non-streaming models
+                # 2. Handle Tool Events
+                elif kind == "on_tool_start":
+                    yield {
+                        "type": "tool_start",
+                        "tool": event.get("name"),
+                        "inputs": event.get("data", {}).get("input", {})
+                    }
+                
+                elif kind == "on_tool_end":
+                    yield {
+                        "type": "tool_end",
+                        "tool": event.get("name"),
+                        "output": event.get("data", {}).get("output", "Done")
+                    }
+                
+                # 3. Handle model end (for non-streaming or final capture)
                 elif kind == "on_chat_model_end":
-                    # If we missed tokens, the final result might be here
-                    pass 
+                    # Potentially useful for final checks
+                    pass
 
         except GraphRecursionError:
-            yield {"event": "error", "message": "⚠️ Task too complex or loop detected."}
+            yield {"type": "error", "message": "⚠️ Task too complex or loop detected."}
         except Exception as e:
             from src.core.mcp.manager import ApprovalRequiredError
-            if isinstance(e, ApprovalRequiredError):
-                # Yield a structured event for the UI to handle
+            # Check for ApprovalRequiredError in the cause or the message
+            # ReAct agent wraps errors
+            err = e
+            if hasattr(e, "__cause__") and isinstance(e.__cause__, ApprovalRequiredError):
+                err = e.__cause__
+            
+            if isinstance(err, ApprovalRequiredError):
                 yield {
-                    "event": "approval_required",
-                    "tool_name": e.tool_name,
-                    "tool_args": e.tool_args,
-                    "message": e.message
+                    "type": "approval_required",
+                    "tool_name": err.tool_name,
+                    "tool_args": err.tool_args,
+                    "message": err.message
                 }
             else:
                 logger.error(f"Streaming error: {e}")
-                yield {"event": "error", "message": str(e)}
+                yield {"type": "error", "message": str(e)}
 
     async def execute(self, user_input: str, history: List[BaseMessage]) -> List[BaseMessage]:
-        """
-        Sync-like execution for compatibility.
-        """
-        self.agent._conversation_history = history
-        try:
-            await self.agent.run(user_input)
-        except Exception as e:
-            logger.error(f"Agent execution error: {e}")
-            
-        return self.agent.get_conversation_history()
+        """Legacy execution for compatibility."""
+        result = await self.agent.ainvoke({"messages": history + [("user", user_input)]})
+        return result["messages"]
