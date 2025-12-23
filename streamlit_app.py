@@ -57,7 +57,6 @@ from src.core.agents.agent import Agent
 from src.core.mcp.manager import MCPManager
 from src.core.llm.provider import LLMFactory
 from src.core.state import (
-    init_checkpointer, 
     get_or_create_session,
     clear_current_session,
     load_history,
@@ -90,7 +89,6 @@ def init_session_state():
         st.session_state.pending_approval = None
 
 async def initialize_app():
-    await init_checkpointer()
     manager = MCPManager()
     await manager.initialize()
     
