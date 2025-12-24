@@ -23,22 +23,45 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 # Encryption Handling
-# We expect an ENCRYPTION_KEY in env, or we generate a temporary one (warning: data loss on restart if temporary)
-_ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "").strip().strip("'").strip('"')
+def _initialize_cipher():
+    key = os.getenv("ENCRYPTION_KEY", "").strip()
+    
+    # Clean quotes
+    if (key.startswith("'") and key.endswith("'")) or (key.startswith('"') and key.endswith('"')):
+        key = key[1:-1].strip()
+    
+    # Try to initialize
+    try:
+        if not key: raise ValueError("Empty key")
+        return Fernet(key.encode()), key
+    except Exception:
+        new_key = Fernet.generate_key().decode()
+        logger.warning(f"⚠️ ENCRYPTION_KEY is invalid or missing. Generating a new one. DATA PROTECTED BY THE OLD KEY WILL BE UNREADABLE.")
+        
+        # Self-healing: try to update .env
+        try:
+            env_path = os.path.join(os.getcwd(), ".env")
+            if os.path.exists(env_path):
+                with open(env_path, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                
+                with open(env_path, "w", encoding="utf-8") as f:
+                    found = False
+                    for line in lines:
+                        if line.startswith("ENCRYPTION_KEY="):
+                            f.write(f"ENCRYPTION_KEY={new_key}\n")
+                            found = True
+                        else:
+                            f.write(line)
+                    if not found:
+                        f.write(f"\nENCRYPTION_KEY={new_key}\n")
+                logger.info("✅ Automatically updated .env with a valid ENCRYPTION_KEY.")
+        except Exception as e:
+            logger.error(f"❌ Failed to auto-update .env: {e}")
+            
+        return Fernet(new_key.encode()), new_key
 
-if not _ENCRYPTION_KEY:
-    logger.warning("⚠️ ENCRYPTION_KEY not found in environment. Generating a temporary key. ENCRYPTED DATA WILL BE LOST ON RESTART.")
-    _ENCRYPTION_KEY = Fernet.generate_key().decode()
-    # In production, you would fix this. For dev, we'll proceed.
-
-# Final cleanup to ensure it's a valid Fernet key length
-try:
-    cipher_suite = Fernet(_ENCRYPTION_KEY.encode() if isinstance(_ENCRYPTION_KEY, str) else _ENCRYPTION_KEY)
-except Exception as e:
-    logger.error(f"❌ Critical Error: Invalid ENCRYPTION_KEY format: {e}")
-    # Fallback to a temporary key to prevent crash if .env is broken
-    _ENCRYPTION_KEY = Fernet.generate_key()
-    cipher_suite = Fernet(_ENCRYPTION_KEY)
+cipher_suite, _current_key = _initialize_cipher()
 
 def encrypt_value(value: str) -> str:
     """Encrypt a string value."""
