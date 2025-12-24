@@ -13,6 +13,7 @@ from typing import Optional, Dict, Any, List
 import requests
 import urllib.parse
 from urllib.parse import urlencode
+import uuid
 
 # Set page config first
 st.set_page_config(
@@ -85,6 +86,7 @@ from src.core.agents.planner import Planner
 from src.core.agents.agent import Agent
 from src.core.mcp.manager import MCPManager
 from src.core.llm.provider import LLMFactory
+from src.core.auth.service import AuthService
 from src.core.state import (
     get_or_create_session,
     clear_current_session,
@@ -99,11 +101,13 @@ def load_custom_css():
         .user-message { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1rem; border-radius: 1rem; margin: 0.5rem 0; width: fit-content; max-width: 80%; margin-left: auto; }
         .assistant-message { background: #1f2937; color: white; padding: 1rem; border-radius: 1rem; margin: 0.5rem 0; width: fit-content; max-width: 85%; border: 1px solid #374151; }
         .event-log { background: #000; color: #0f0; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 0.8rem; }
+        .auth-container { max-width: 400px; margin: 100px auto; padding: 2rem; background: #1f2937; border-radius: 1rem; border: 1px solid #374151; }
     </style>
     """, unsafe_allow_html=True)
 
 def init_session_state():
     if "initialized" not in st.session_state:
+        st.session_state.user = None
         st.session_state.initialized = False
         st.session_state.messages = []
         st.session_state.history = []
@@ -117,22 +121,56 @@ def init_session_state():
         st.session_state.user_id = None
         st.session_state.pending_approval = None
 
-async def initialize_app():
-    manager = MCPManager()
+async def initialize_app(user_id: Any):
+    # Instantiate Manager with user_id
+    manager = MCPManager(user_id=user_id)
     await manager.initialize()
     
     # We load LLM and Planner once
     llm = LLMFactory.load_config_and_create_llm()
     planner = Planner(api_key=os.getenv("OPENROUTER_API_KEY"))
     
-    # Use valid UUIDs for database compatibility (default tenant from migration)
+    # Use valid UUIDs for database compatibility
+    # Tenant ID could also be user-specific, for now we use a default tenant
     tenant_id = os.getenv("DEFAULT_TENANT_ID", "00000000-0000-0000-0000-000000000001")
-    user_id = os.getenv("DEFAULT_USER_ID", "00000000-0000-0000-0000-000000000001")
     
     thread_id, is_new = get_or_create_session(tenant_id)
     history = await load_history(thread_id, tenant_id, user_id)
     
     return planner, manager, thread_id, history, is_new, tenant_id, user_id
+
+def render_login_page():
+    st.markdown('<div class="auth-container">', unsafe_allow_html=True)
+    st.title("🔐 Login")
+    
+    tab1, tab2 = st.tabs(["Login", "Register"])
+    
+    with tab1:
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Password", type="password", key="login_pw")
+        if st.button("Login", use_container_width=True):
+            user = run_async(AuthService.authenticate_user(email, password))
+            if user:
+                st.session_state.user = user
+                st.success("Welcome back!")
+                st.rerun()
+            else:
+                st.error("Invalid credentials")
+
+    with tab2:
+        r_email = st.text_input("Email", key="reg_email")
+        r_pw = st.text_input("Password", type="password", key="reg_pw")
+        r_name = st.text_input("Full Name", key="reg_name")
+        if st.button("Register", use_container_width=True):
+            try:
+                user = run_async(AuthService.register_user(r_email, r_pw, r_name))
+                st.session_state.user = user
+                st.success("Account created!")
+                st.rerun()
+            except Exception as e:
+                st.error(str(e))
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
 async def process_message_async(user_input: str, planner, mcp_manager, history, thread_id, tenant_id, user_id):
     events = []
@@ -327,7 +365,40 @@ async def handle_oauth_callback():
 def render_server_manager_dialog():
     st.subheader("Add / Manage Servers")
     
-    tab1, tab2 = st.tabs(["Add Server", "Installed Servers"])
+    tab1, tab2, tab3 = st.tabs(["Add Server", "Installed Servers", "HITL Settings"])
+    
+    with tab3:
+        st.markdown("#### Human-In-The-Loop Settings")
+        if st.session_state.mcp_manager:
+            curr_config = st.session_state.mcp_manager.config_data.get("hitl_config", {})
+            
+            enabled = st.toggle("Enable HITL Approval", value=curr_config.get("enabled", True))
+            
+            mode = st.radio("HITL Mode", ["denylist", "allowlist"], 
+                          index=0 if curr_config.get("mode") == "denylist" else 1,
+                          help="Denylist: Approve only sensitive tools. Allowlist: Approve ALL tools.")
+            
+            sensitive_tools_str = st.text_area(
+                "Sensitive Tools (one per line, supports wildcards *)",
+                value="\n".join(curr_config.get("sensitive_tools", [])),
+                help="Only used in denylist mode. Matches against either the full name (e.g. gmail_server__send) OR the base name (e.g. send)."
+            )
+            
+            msg = st.text_input("Approval Message", value=curr_config.get("approval_message", "Execution requires your approval."))
+            
+            if st.button("Save HITL Settings", use_container_width=True):
+                new_config = {
+                    "enabled": enabled,
+                    "mode": mode,
+                    "sensitive_tools": [s.strip() for s in sensitive_tools_str.split("\n") if s.strip()],
+                    "approval_message": msg
+                }
+                success = run_async(st.session_state.mcp_manager.update_user_hitl_config(new_config))
+                if success:
+                    st.success("✅ HITL Settings Updated!")
+                    st.rerun()
+                else:
+                    st.error("Failed to update settings.")
     
     with tab1:
         st.markdown("#### Add New Server")
@@ -485,8 +556,18 @@ def render_server_manager_dialog():
 def render_sidebar():
     with st.sidebar:
         st.markdown("# 🤖 AgentSphere AI")
-        if st.button("🆕 New Chat"):
+        
+        if st.session_state.user:
+            st.caption(f"👤 {st.session_state.user.email}")
+            if st.button("🚪 Logout", use_container_width=True):
+                st.session_state.clear()
+                st.rerun()
+        
+        st.markdown("---")
+        
+        if st.button("🆕 New Chat", use_container_width=True):
             clear_current_session()
+            # Keep user but reset conversation
             st.session_state.initialized = False
             st.rerun()
         
@@ -499,7 +580,7 @@ def render_sidebar():
                 st.write(f"{icon} {s_name} ({s_info['tools_count']} tools)")
                 
             st.markdown("---")
-            if st.button("⚙️ Manage Servers"):
+            if st.button("⚙️ Manage Servers", use_container_width=True):
                 render_server_manager_dialog()
 
 def render_main_chat():
@@ -573,34 +654,18 @@ def render_main_chat():
                     st.rerun()
 
 def main():
-    # Handle OAuth Callback before anything else (if possible)
-    # Using st.query_params access
-    # We need a quick async loop for this if we want to add server
-    if "code" in st.query_params:
-        # Initialize minimal state if needed or just wait for full init
-         pass 
-
-    # HOT-FIX: Detect stale MCPManager (missing add_server) and force reload
-    if st.session_state.get("mcp_manager") and not hasattr(st.session_state.mcp_manager, 'add_server'):
-        st.warning("⚠️ Application updated: Reloading core components...")
-        import importlib
-        import src.core.mcp.manager
-        
-        # Force reload module
-        importlib.reload(src.core.mcp.manager)
-        
-        # Reset Singleton and Session State
-        src.core.mcp.manager.MCPManager._instance = None
-        st.session_state.mcp_manager = None
-        st.session_state.initialized = False
-        st.rerun() 
-
     init_session_state()
     load_custom_css()
     
+    # Auth Guard
+    if not st.session_state.user:
+        render_login_page()
+        return
+
     if not st.session_state.initialized:
         with st.spinner("Initializing..."):
-            p, m, tid, hist, is_new, tenant_id, user_id = run_async(initialize_app())
+            # Initialize with logged in user
+            p, m, tid, hist, is_new, tenant_id, user_id = run_async(initialize_app(st.session_state.user.id))
             st.session_state.planner = p
             st.session_state.mcp_manager = m
             st.session_state.thread_id = tid

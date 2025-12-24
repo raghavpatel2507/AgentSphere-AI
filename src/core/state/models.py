@@ -5,7 +5,7 @@ This module defines the SQLAlchemy models for storing conversation history
 in a normalized database schema (conversations and messages tables).
 """
 
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from src.core.config.database import Base
@@ -76,4 +76,50 @@ class Message(Base):
     # Timestamps - use client-side default since DB doesn't have server default
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class User(Base):
+    """
+    Represents a registered user of the application.
+    """
+    __tablename__ = "users"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=True)
+    
+    is_active = Column(Boolean, default=True)
+    hitl_config = Column(JSONB, default={
+        "enabled": True, 
+        "mode": "denylist", 
+        "sensitive_tools": ["*google*", "*delete*", "*remove*", "*write*", "*-rm"],
+        "approval_message": "Execution requires your approval."
+    })
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class MCPServerConfig(Base):
+    """
+    Stores configuration for an MCP server, specific to a user.
+    Sensitive details (like tokens in 'env') can be encrypted.
+    """
+    __tablename__ = "mcp_server_configs"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True
+    )
+    
+    name = Column(String(255), nullable=False)
+    config = Column(JSONB, nullable=False) # The full config dict
+    
+    enabled = Column(Boolean, default=True)
+    is_encrypted = Column(Boolean, default=False) # Flag to indicate if we need to decrypt
+    
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
