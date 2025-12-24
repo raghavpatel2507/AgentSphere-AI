@@ -14,6 +14,7 @@ import requests
 import urllib.parse
 from urllib.parse import urlencode
 import uuid
+from src.core.mcp.registry import SPHERE_REGISTRY, get_app_by_id
 
 # Set page config first
 st.set_page_config(
@@ -30,17 +31,16 @@ logging.getLogger("mcp_use").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("openai").setLevel(logging.WARNING)
 
-# Windows event loop policy fix
-if os.name == 'nt':
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
 # nest_asyncio is REQUIRED for Streamlit + PostgreSQL (asyncpg)
 try:
     import nest_asyncio
     nest_asyncio.apply()
 except ImportError:
     st.warning("⚠️ `nest_asyncio` is missing. This is required for database stability in Streamlit. Please run: `pip install nest_asyncio`")
-    # We don't stop here, but it will likely crash during DB operations if not installed
+
+# Windows event loop policy fix
+if os.name == 'nt':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 @st.cache_resource
 def get_loop_factory():
@@ -57,28 +57,32 @@ def get_stable_loop():
     return holder["loop"]
 
 def run_async(coro):
+    """
+    Run a coroutine safely in the Streamlit environment.
+    Uses nest_asyncio and ensures the loop is properly managed.
+    """
     try:
         loop = get_stable_loop()
-        # Ensure this loop is the current one for this thread
         asyncio.set_event_loop(loop)
-        if loop.is_running():
-            # If we are already in a running loop (unlikely in Streamlit script runner, but possible if nested)
-            # using nested_asyncio we might be able to create a future?
-            # actually safe to simple run? not if loop is running.
-            # For now assume sync context calling async
-            import concurrent.futures
-            # If loop is running, we can't use run_until_complete.
-            # But Streamlit script execution is usually synchronous main thread.
-            pass
+        
+        # If the loop is already running, we use nest_asyncio's run_until_complete
+        # but we wrap it to ensure context is handled.
         return loop.run_until_complete(coro)
     except RuntimeError as e:
         if "Event loop is closed" in str(e):
-             # Force recreate
              holder = get_loop_factory()
              loop = asyncio.new_event_loop()
              asyncio.set_event_loop(loop)
+             nest_asyncio.apply(loop)
              holder["loop"] = loop
              return loop.run_until_complete(coro)
+        elif "already entered" in str(e):
+            # This is the 'cannot enter context' error. 
+            # It usually means we are trying to run a coro within a coro.
+            # We can try to await it directly if we were already in an async context,
+            # but run_async is called from sync Streamlit threads.
+            st.error("🔄 Async Conflict detected. Please refresh the page.")
+            logger.error(f"Async Context conflict: {e}")
         raise e
 
 # Project Modules
@@ -102,6 +106,13 @@ def load_custom_css():
         .assistant-message { background: #1f2937; color: white; padding: 1rem; border-radius: 1rem; margin: 0.5rem 0; width: fit-content; max-width: 85%; border: 1px solid #374151; }
         .event-log { background: #000; color: #0f0; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 0.8rem; }
         .auth-container { max-width: 400px; margin: 100px auto; padding: 2rem; background: #1f2937; border-radius: 1rem; border: 1px solid #374151; }
+        .app-card { background: #1f2937; border: 1px solid #374151; border-radius: 0.75rem; padding: 1.2rem; margin-bottom: 1rem; min-height: 180px; position: relative;}
+        .app-icon { font-size: 2.2rem; margin-bottom: 0.5rem; }
+        .app-name { font-weight: bold; font-size: 1.1rem; margin-bottom: 0.4rem; color: #f3f4f6; }
+        .app-desc { font-size: 0.85rem; color: #9ca3af; line-height: 1.4; margin-bottom: 1rem; }
+        .status-badge { font-size: 0.7rem; padding: 0.2rem 0.6rem; border-radius: 9999px; font-weight: 600; text-transform: uppercase; }
+        .status-connected { background: #064e3b; color: #6ee7b7; border: 1px solid #059669; }
+        .status-available { background: #374151; color: #d1d5db; border: 1px solid #4b5563; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -120,6 +131,7 @@ def init_session_state():
         st.session_state.tenant_id = None
         st.session_state.user_id = None
         st.session_state.pending_approval = None
+        st.session_state.selected_app = None
 
 async def initialize_app(user_id: Any):
     # Instantiate Manager with user_id
@@ -361,11 +373,138 @@ async def handle_oauth_callback():
                 else:
                     st.error("Failed to add server.")
 
+def render_sphere_app_center():
+    """Renders a grid of available and connected Agent Spheres."""
+    if not st.session_state.mcp_manager:
+        st.error("MCP Manager not initialized.")
+        return
+
+    # Get current status to see what's connected
+    status = run_async(st.session_state.mcp_manager.get_all_tools_status())
+    connected_names = set(status.keys())
+    
+    # 1. Connection Dialog (If an app is chosen for auth)
+    if st.session_state.get("selected_app"):
+        app = get_app_by_id(st.session_state.selected_app)
+        if app:
+            st.markdown(f"#### 🔐 Authorize {app.name}")
+            st.caption(app.description)
+            
+            with st.container(border=True):
+                auth_values = {}
+                for field in app.auth_fields:
+                    auth_values[field.name] = st.text_input(
+                        field.label, 
+                        key=f"auth_val_{app.id}_{field.name}",
+                        type="password" if field.type == "password" else "default",
+                        help=field.description
+                    )
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("🚀 Connect & Verify", use_container_width=True, type="primary"):
+                        # Construct config from template
+                        import copy
+                        config = copy.deepcopy(app.config_template)
+                        # Replace placeholders in ENV
+                        if "env" in config:
+                            for k, v in config["env"].items():
+                                if isinstance(v, str):
+                                    for field_name, value in auth_values.items():
+                                        v = v.replace(f"${{{field_name}}}", value)
+                                    config["env"][k] = v
+                        
+                        # Try to connect with validation
+                        with st.spinner(f"Verifying connection to {app.name}..."):
+                                success = run_async(st.session_state.mcp_manager.add_server(app.id, config, validate=True))
+                                if success:
+                                    st.success(f"✅ Successfully connected to {app.name}!")
+                                    st.session_state.selected_app = None
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Failed to connect to {app.name}. Please check credentials.")
+                                    st.info("💡 **Troubleshooting Tip**: If you are on Windows and using `npx`, your `npm` login might have expired. Try running `npm logout` in your terminal and try again.")
+                with c2:
+                    if st.button("Cancel", use_container_width=True):
+                        st.session_state.selected_app = None
+                        st.rerun()
+            st.divider()
+
+    # 2. Show Connected Spheres
+    connected_apps = [a for a in SPHERE_REGISTRY if a.id in connected_names]
+    registry_ids = {a.id for a in SPHERE_REGISTRY}
+    custom_apps = [name for name in connected_names if name not in registry_ids]
+    
+    if connected_apps or custom_apps:
+        st.markdown("##### ✅ Connected Spheres")
+        cols = st.columns(3)
+        idx = 0
+        for app in connected_apps:
+            with cols[idx % 3]:
+                st.markdown(f"""
+                <div class="app-card">
+                    <div class="app-icon">{app.icon}</div>
+                    <div class="app-name">{app.name}</div>
+                    <div class="app-desc">{app.description}</div>
+                    <span class="status-badge status-connected">Connected</span>
+                </div>
+                """, unsafe_allow_html=True)
+                # Small button to disconnect if they want
+                if st.button("Disconnect", key=f"disco_{app.id}", use_container_width=True):
+                    run_async(st.session_state.mcp_manager.remove_server(app.id))
+                    st.rerun()
+            idx += 1
+            
+        for name in custom_apps:
+            with cols[idx % 3]:
+                st.markdown(f"""
+                <div class="app-card">
+                    <div class="app-icon">🔧</div>
+                    <div class="app-name">{name}</div>
+                    <div class="app-desc">Custom added server.</div>
+                    <span class="status-badge status-connected">Custom</span>
+                </div>
+                """, unsafe_allow_html=True)
+            idx += 1
+        st.divider()
+
+    # 3. Show Available Spheres
+    st.markdown("##### ✨ Available Spheres")
+    available_apps = [a for a in SPHERE_REGISTRY if a.id not in connected_names]
+    
+    if not available_apps:
+        st.info("You've connected all available spheres!")
+    else:
+        a_cols = st.columns(3)
+        for i, app in enumerate(available_apps):
+            with a_cols[i % 3]:
+                st.markdown(f"""
+                <div class="app-card">
+                    <div class="app-icon">{app.icon}</div>
+                    <div class="app-name">{app.name}</div>
+                    <div class="app-desc">{app.description}</div>
+                    <span class="status-badge status-available">Available</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if st.button(f"Configure {app.name}", key=f"conn_btn_{app.id}", use_container_width=True):
+                    if not app.auth_fields:
+                        # No auth needed, connect immediately
+                        run_async(st.session_state.mcp_manager.add_server(app.id, app.config_template, validate=True))
+                        st.rerun()
+                    else:
+                        st.session_state.selected_app = app.id
+                        st.rerun()
+
 @st.dialog("Manage Servers")
 def render_server_manager_dialog():
-    st.subheader("Add / Manage Servers")
+    st.subheader("AgentSphere App Center")
     
-    tab1, tab2, tab3 = st.tabs(["Add Server", "Installed Servers", "HITL Settings"])
+    # Add App Center as the primary tab
+    tab_center, tab1, tab2, tab3 = st.tabs(["🌐 App Center", "➕ Custom Server", "📦 Installed", "🛡️ HITL Settings"])
+    
+    with tab_center:
+        render_sphere_app_center()
     
     with tab3:
         st.markdown("#### Human-In-The-Loop Settings")

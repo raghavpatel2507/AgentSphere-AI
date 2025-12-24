@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config.database import async_engine
 from src.core.state.models import User, MCPServerConfig
 from src.core.auth.security import encrypt_value, decrypt_value
+from src.core.mcp.registry import SPHERE_REGISTRY, get_app_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -312,7 +313,11 @@ class MCPManager:
             logger.info(f"✅ Connected to server: {name}")
             
         except Exception as e:
-            logger.error(f"❌ Failed to connect to server {name}: {e}")
+            error_msg = str(e)
+            logger.error(f"❌ Failed to connect to server {name}: {error_msg}")
+            # If it's a common npm error on Windows, provide a hint
+            if "Connection closed" in error_msg or "npx" in error_msg:
+                logger.warning("💡 Hint: If using npx on Windows, ensure npx is working and you aren't hit by 'npm notice Access token expired'. Try running 'npm logout' in your terminal.")
 
     async def cleanup(self):
         """Disconnect all servers."""
@@ -638,15 +643,22 @@ class MCPManager:
         await self._save_config_to_db(server_name, server_config)
         return f"Tool '{tool_name}' {'enabled' if enable else 'disabled'}."
 
-    async def add_server(self, name: str, config: Dict[str, Any]) -> bool:
+    async def add_server(self, name: str, config: Dict[str, Any], validate: bool = False) -> bool:
         """Add a new server to the configuration and connect to it."""
         try:
-            # 1. Update Database
+            if validate:
+                # 1. Initialize and Connect first
+                await self.init_server(name, config)
+                if name not in self.server_sessions:
+                    return False
+            
+            # 2. Update Database
             await self._save_config_to_db(name, config)
             
-            # 2. Initialize and Connect
-            # Using init_server directly to connect immediately
-            await self.init_server(name, config)
+            if not validate:
+                # If we didn't validate (connect) above, do it now
+                await self.init_server(name, config)
+                
             return True
         except Exception as e:
             logger.error(f"Failed to add server {name}: {e}")
