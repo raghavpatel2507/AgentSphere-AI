@@ -9,9 +9,12 @@ SIMPLIFIED VERSION - Easy to understand!
 
 import uuid
 import json
+import logging
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Any
 from langchain_core.messages import BaseMessage
+
+logger = logging.getLogger(__name__)
 from src.core.state.conversation_store import (
     get_or_create_conversation,
     load_messages,
@@ -95,8 +98,8 @@ def save_current_session(thread_id: str, tenant_id: str):
     """
     session_file = get_session_file_path()
     session_data = {
-        "thread_id": thread_id,
-        "tenant_id": tenant_id,
+        "thread_id": str(thread_id),
+        "tenant_id": str(tenant_id),
     }
     with open(session_file, "w") as f:
         json.dump(session_data, f, indent=2)
@@ -158,31 +161,18 @@ def get_or_create_session(tenant_id: str) -> tuple[str, bool]:
 
 async def load_history(
     thread_id: str,
-    tenant_id: str,
-    user_id: str
+    tenant_id: Any,
+    user_id: Any
 ) -> List[BaseMessage]:
     """
     Load conversation history from database.
-    
-    This is SIMPLE:
-    1. Get or create conversation record
-    2. Load messages from database
-    3. Convert to LangChain format
-    
-    Args:
-        thread_id: Thread ID
-        tenant_id: Tenant UUID (as string)
-        user_id: User UUID (as string)
-        
-    Returns:
-        List of LangChain messages
     """
     try:
         from uuid import UUID
         
-        # Convert string UUIDs to UUID objects
-        tenant_uuid = UUID(tenant_id)
-        user_uuid = UUID(user_id)
+        # Defensive conversion: Ensure we have UUID objects for DB query
+        tenant_uuid = tenant_id if isinstance(tenant_id, UUID) else UUID(str(tenant_id))
+        user_uuid = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
         
         # Get or create conversation
         conversation = await get_or_create_conversation(
@@ -200,40 +190,25 @@ async def load_history(
         return langchain_messages
         
     except Exception as e:
-        print(f"⚠️ Error loading history for {thread_id}: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"⚠️ Error loading history for {thread_id}: {e}")
         return []
 
 
 async def save_history(
     thread_id: str,
-    tenant_id: str,
-    user_id: str,
+    tenant_id: Any,
+    user_id: Any,
     history: List[BaseMessage]
 ):
     """
     Save conversation history to database.
-    
-    This is SIMPLE:
-    1. Get or create conversation record
-    2. Save new messages to database
-    
-    NOTE: We only save NEW messages (not already in DB).
-    To detect new messages, we compare with what's already loaded.
-    
-    Args:
-        thread_id: Thread ID
-        tenant_id: Tenant UUID (as string)
-        user_id: User UUID (as string)
-        history: List of LangChain messages to save
     """
     try:
         from uuid import UUID
         
-        # Convert string UUIDs to UUID objects
-        tenant_uuid = UUID(tenant_id)
-        user_uuid = UUID(user_id)
+        # Defensive conversion: Ensure we have UUID objects for DB query
+        tenant_uuid = tenant_id if isinstance(tenant_id, UUID) else UUID(str(tenant_id))
+        user_uuid = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
         
         # Get or create conversation
         conversation = await get_or_create_conversation(
@@ -257,7 +232,7 @@ async def save_history(
             await save_message(conversation.id, role, msg.content)
         
         if new_messages:
-            print(f"✅ Saved {len(new_messages)} new message(s) to database")
+            logger.info(f"✅ Saved {len(new_messages)} new message(s) to database")
             
             # Auto-name conversation if it's still "New Conversation"
             if conversation.title == "New Conversation" or not conversation.title:
@@ -273,6 +248,4 @@ async def save_history(
                     print(f"📝 Updated conversation title to: {new_title}")
             
     except Exception as e:
-        print(f"⚠️ Error saving history for {thread_id}: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"⚠️ Error saving history for {thread_id}: {e}")

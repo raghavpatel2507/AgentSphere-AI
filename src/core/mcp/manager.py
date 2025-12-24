@@ -25,6 +25,12 @@ class ApprovalRequiredError(Exception):
 from mcp_use.client.middleware.middleware import Middleware, MiddlewareContext
 
 
+from sqlalchemy import select, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.core.config.database import async_engine
+from src.core.state.models import User, MCPServerConfig
+from src.core.auth.security import encrypt_value, decrypt_value
+
 logger = logging.getLogger(__name__)
 
 class ApprovalMiddleware(Middleware):
@@ -49,13 +55,17 @@ class ApprovalMiddleware(Middleware):
                 # print(f"DEBUG: HITL mode={mode}, sensitive_tools={sensitive_tools}")
                 
                 requires_approval = False
-                if mode == "all":
+                if mode == "allowlist":
                     requires_approval = True
                 elif mode == "denylist":
+                    # Extract base name for global matching
+                    base_name = tool_name.split("__")[-1] if "__" in tool_name else tool_name
+                    
                     for pattern in sensitive_tools:
-                        if fnmatch.fnmatch(tool_name, pattern):
+                        # Match against either full namespaced name OR the base name
+                        if fnmatch.fnmatch(tool_name, pattern) or fnmatch.fnmatch(base_name, pattern):
                             requires_approval = True
-                            print(f"DEBUG: Tool {tool_name} matched pattern {pattern}")
+                            logger.info(f"HITL Match: Tool {tool_name} (base: {base_name}) matched pattern {pattern}")
                             break
                 
                 # Check whitelist (bypass HITL if tool_name in whitelisted_tools)
@@ -77,24 +87,11 @@ class MCPManager:
     """
     Universal MCP Manager using mcp-use library.
     Orchestrates all MCP servers, handles configuration, and manages tools.
+    Now supporting Multi-User DB storage.
     """
     
-    _instance = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(MCPManager, cls).__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-    
-    def __init__(self):
-        if self._initialized:
-            return
-            
-        # Standard configuration file - absolute path for reliability
-        import os
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-        self.config_path = os.path.join(base_dir, "multi_server_config.json")
+    def __init__(self, user_id: Any):
+        self.user_id = user_id
         
         # Central MCPClient to manage all servers
         self._mcp_client: Optional[MCPClient] = None
@@ -102,14 +99,20 @@ class MCPManager:
         # Map server_name -> MCPSession
         self.server_sessions: Dict[str, Any] = {}
         
-        self.config_data = {}
+        # Default global config (hitl, etc.)
+        self.config_data = {
+            "mcpServers": {}, 
+            "hitl_config": {
+                "enabled": True, 
+                "mode": "denylist", 
+                "sensitive_tools": ["*google*", "*delete*", "*remove*", "*write*", "*-rm"]
+            }
+        }
         # Runtime cache for session-approved tools
         self.whitelisted_tools: set[str] = set()
         
         # Tool Definition Cache (server_name -> list[tool])
         self.tool_cache: Dict[str, List[Any]] = {}
-        
-        self._initialized = True
 
     def whitelist_tool(self, tool_name: str, tool_args: dict):
         """Add a tool + args signature to the session whitelist to bypass HITL."""
@@ -117,32 +120,112 @@ class MCPManager:
         self.whitelisted_tools.add(sig)
         logger.info(f"Tool {tool_name} whitelisted for this session.")
         
-    def load_config(self) -> Dict[str, Any]:
-        """Load configuration from file (multi_server_config.json)."""
-        if not os.path.exists(self.config_path):
-            logger.warning(f"Config file {self.config_path} not found.")
-            return {"mcpServers": {}}
-            
-        try:
-            with open(self.config_path, 'r') as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Error loading config: {e}")
-            return {"mcpServers": {}}
+    async def _load_config_from_db(self):
+        """Load configuration from DB for the current user."""
+        async with AsyncSession(async_engine) as session:
+            # 1. Load User Settings (HITL Config)
+            user_stmt = select(User).where(User.id == self.user_id)
+            user_result = await session.execute(user_stmt)
+            user = user_result.scalar_one_or_none()
+            if user and user.hitl_config:
+                self.config_data["hitl_config"] = user.hitl_config
+                logger.info(f"Loaded HITL config for user {self.user_id}.")
 
-    def reload_config(self):
-        """Reload configuration from disk."""
-        logger.info("Reloading MCP configuration...")
-        self.config_data = self.load_config()
-        self.tool_cache = {}
-        return self.config_data
+            # 2. Load MCP Servers
+            stmt = select(MCPServerConfig).where(MCPServerConfig.user_id == self.user_id)
+            result = await session.execute(stmt)
+            configs = result.scalars().all()
+            
+            mcp_servers = {}
+            for row in configs:
+                config = row.config
+                if row.is_encrypted:
+                    config = self._decrypt_config(config)
+                
+                # Ensure 'enabled' flag is preserved in runtime config
+                config["enabled"] = row.enabled
+                mcp_servers[row.name] = config
+                
+            self.config_data["mcpServers"] = mcp_servers
+            return self.config_data
+
+    async def update_user_hitl_config(self, hitl_config: Dict[str, Any]):
+        """Update user's HITL settings in the database."""
+        async with AsyncSession(async_engine) as session:
+            stmt = select(User).where(User.id == self.user_id)
+            result = await session.execute(stmt)
+            user = result.scalar_one_or_none()
+            
+            if user:
+                # Merge or replace? For now, replace.
+                user.hitl_config = hitl_config
+                await session.commit()
+                # Refresh runtime cache
+                self.config_data["hitl_config"] = hitl_config
+                logger.info(f"Updated HITL config for user {self.user_id}.")
+                return True
+            return False
+
+    async def _save_config_to_db(self, server_name: str, config: Dict[str, Any]):
+        """Save/Update configuration in DB for the current user."""
+        async with AsyncSession(async_engine) as session:
+            # Check if exists
+            stmt = select(MCPServerConfig).where(
+                MCPServerConfig.user_id == self.user_id,
+                MCPServerConfig.name == server_name
+            )
+            result = await session.execute(stmt)
+            row = result.scalar_one_or_none()
+            
+            enabled = config.pop("enabled", True)
+            
+            # Encrypt sensitive parts before saving
+            encrypted_config = self._encrypt_config(config)
+            
+            if row:
+                row.config = encrypted_config
+                row.enabled = enabled
+                row.is_encrypted = True
+            else:
+                row = MCPServerConfig(
+                    user_id=self.user_id,
+                    name=server_name,
+                    config=encrypted_config,
+                    enabled=enabled,
+                    is_encrypted=True
+                )
+                session.add(row)
+                
+            await session.commit()
+            # Refresh runtime cache
+            await self._load_config_from_db()
+
+    def _encrypt_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Encrypt sensitive env vars in config."""
+        import copy
+        c = copy.deepcopy(config)
+        if "env" in c:
+            for k, v in c["env"].items():
+                if "TOKEN" in k.upper() or "KEY" in k.upper() or "SECRET" in k.upper():
+                    c["env"][k] = encrypt_value(v)
+        return c
+
+    def _decrypt_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Decrypt sensitive env vars in config."""
+        import copy
+        c = copy.deepcopy(config)
+        if "env" in c:
+            for k, v in c["env"].items():
+                if "TOKEN" in k.upper() or "KEY" in k.upper() or "SECRET" in k.upper():
+                    c["env"][k] = decrypt_value(v)
+        return c
             
     async def initialize(self):
         """
         Instant initialization. 
         Just prepares the client and loads config, doesn't connect yet.
         """
-        logger.info("Initializing MCP Manager (Deferred Mode)...")
+        logger.info(f"Initializing MCP Manager (User: {self.user_id})...")
         
         # Reset state to ensure fresh loop binding
         if self._mcp_client:
@@ -150,7 +233,7 @@ class MCPManager:
                 await self._mcp_client.close_all_sessions()
             except: pass
             
-        self.config_data = self.load_config()
+        await self._load_config_from_db()
         self.server_sessions = {} # Clear old sessions bound to old loops
         self.tool_cache = {}
         
@@ -247,6 +330,8 @@ class MCPManager:
         await self.connect_to_servers(server_names)
         
         all_tools = []
+        used_names = set()
+        
         for name in server_names:
             # Double check config in case it was connected previously but now disabled
             mcp_servers = self.config_data.get("mcpServers", {})
@@ -259,7 +344,7 @@ class MCPManager:
                 continue
                 
             try:
-                # Adapter to make mcp-use session compatible with langchain-mcp-adapters
+                # Adapter and load_mcp_tools logic (unchanged)
                 class ListToolsResult:
                     def __init__(self, tools):
                         self.tools = tools
@@ -268,22 +353,15 @@ class MCPManager:
                 class SessionAdapter:
                     def __init__(self, sess):
                         self.sess = sess
-                    
                     async def list_tools(self, cursor: str = None):
-                        # mcp-use returns list directly and doesn't accept cursor
                         tools = await self.sess.list_tools()
                         return ListToolsResult(tools)
-                    
                     async def call_tool(self, name: str, arguments: dict, **kwargs):
-                        # Ignore extra args like progress_callback
                         return await self.sess.call_tool(name=name, arguments=arguments)
 
-                # Use adapter with official library
                 adapter = SessionAdapter(session)
                 mcp_tools = await load_mcp_tools(adapter)
                 
-                # Check for disabled tools in config
-                mcp_servers = self.config_data.get("mcpServers", {})
                 server_config = mcp_servers.get(name, {})
                 disabled_tools = server_config.get("disabled_tools", [])
                 
@@ -291,21 +369,33 @@ class MCPManager:
                     if tool.name in disabled_tools:
                         continue
                     
+                    # Logic for Smart Namespacing
+                    original_name = tool.name
+                    if original_name in used_names:
+                        # Collision! Prefix with server name
+                        safe_server_name = name.replace("-", "_").replace(".", "_").replace(" ", "_").lower()
+                        effective_name = f"{safe_server_name}_{original_name}"
+                    else:
+                        # Unique so far, keep clean name
+                        effective_name = original_name
+                    
                     # Ensure tool returns a string (fixes 422 errors)
-                    tool = self._wrap_tool_to_return_string(tool)
-
+                    tool = self._wrap_tool_to_return_string(tool, new_name=effective_name)
+                    
                     # Wrap with HITL if needed
-                    if self._needs_hitl_wrapper(tool.name):
-                        tool = self._wrap_tool_with_hitl(tool, name)
+                    # Note: My previous fix for Base Name Matching handles both clean and prefixed names!
+                    if self._needs_hitl_wrapper(effective_name):
+                        tool = self._wrap_tool_with_hitl(tool, name, new_name=effective_name)
                     
                     all_tools.append(tool)
+                    used_names.add(effective_name)
                     
             except Exception as e:
                 logger.error(f"Error getting tools for {name}: {e}")
                 
         return all_tools
 
-    def _wrap_tool_to_return_string(self, tool: StructuredTool) -> StructuredTool:
+    def _wrap_tool_to_return_string(self, tool: StructuredTool, new_name: str = None) -> StructuredTool:
         """Wrap tool to ensure it returns a string (fixes 422 errors)."""
         original_coroutine = tool.coroutine
         
@@ -320,7 +410,7 @@ class MCPManager:
             return result
             
         return StructuredTool.from_function(
-            name=tool.name,
+            name=new_name or tool.name,
             description=tool.description,
             func=None,
             coroutine=string_wrapper,
@@ -338,29 +428,37 @@ class MCPManager:
             return False
         
         mode = hitl_config.get("mode", "denylist")
-        if mode == "all":
+        if mode == "allowlist":
             return True
         
         sensitive_tools = hitl_config.get("sensitive_tools", [])
-        return any(fnmatch.fnmatch(tool_name, pattern) for pattern in sensitive_tools)
+        
+        # Extract base name for global matching
+        base_name = tool_name.split("__")[-1] if "__" in tool_name else tool_name
+        
+        return any(
+            fnmatch.fnmatch(tool_name, pattern) or fnmatch.fnmatch(base_name, pattern) 
+            for pattern in sensitive_tools
+        )
     
-    def _wrap_tool_with_hitl(self, tool: StructuredTool, server_name: str) -> StructuredTool:
+    def _wrap_tool_with_hitl(self, tool: StructuredTool, server_name: str, new_name: str = None) -> StructuredTool:
         """Wrap a LangChain tool with HITL approval logic."""
         original_coroutine = tool.coroutine
+        tool_name_for_logic = new_name or tool.name
         
         async def hitl_wrapper(**kwargs):
             # Manual HITL check (middleware will also catch this)
-            await self._check_hitl_approval(tool.name, kwargs)
+            await self._check_hitl_approval(tool_name_for_logic, kwargs)
             # Call original tool function
             if original_coroutine:
                 return await original_coroutine(**kwargs)
             else:
-                # Fallback to direct tool call
+                # Fallback to direct tool call (should not happen with langchain-mcp-adapters)
                 return await self.call_tool(tool.name, kwargs, server_name=server_name)
         
         # Create new tool with wrapped coroutine
         return StructuredTool.from_function(
-            name=tool.name,
+            name=tool_name_for_logic,
             description=tool.description,
             func=None,
             coroutine=hitl_wrapper,
@@ -466,9 +564,11 @@ class MCPManager:
         if server_name not in mcp_servers:
             return False
             
-        mcp_servers[server_name]["enabled"] = enable
-        self.config_data["mcpServers"] = mcp_servers
-        self._save_config(self.config_data)
+        config = mcp_servers[server_name]
+        config["enabled"] = enable
+        
+        # Persist to DB
+        await self._save_config_to_db(server_name, config)
         
         # If disabling, disconnect
         if not enable:
@@ -535,17 +635,14 @@ class MCPManager:
             disabled_list.append(tool_name)
         
         server_config["disabled_tools"] = disabled_list
-        self._save_config(self.config_data)
+        await self._save_config_to_db(server_name, server_config)
         return f"Tool '{tool_name}' {'enabled' if enable else 'disabled'}."
 
     async def add_server(self, name: str, config: Dict[str, Any]) -> bool:
         """Add a new server to the configuration and connect to it."""
         try:
-            # 1. Update Configuration
-            mcp_servers = self.config_data.get("mcpServers", {})
-            mcp_servers[name] = config
-            self.config_data["mcpServers"] = mcp_servers
-            self._save_config(self.config_data)
+            # 1. Update Database
+            await self._save_config_to_db(name, config)
             
             # 2. Initialize and Connect
             # Using init_server directly to connect immediately
@@ -559,25 +656,21 @@ class MCPManager:
         """Remove a server from configuration and disconnect."""
         try:
             # 1. Disconnect if connected
-            if name in self.server_sessions:
-                # We can't easily disconnect just one session in mcp-use client yet without closing all?
-                # Actually mcp-use client manages sessions. providing no public method to close ONE session.
-                # But we can just remove it from our tracking.
-                del self.server_sessions[name]
+            self.server_sessions.pop(name, None)
                 
-            # 2. Update Configuration
-            mcp_servers = self.config_data.get("mcpServers", {})
-            if name in mcp_servers:
-                del mcp_servers[name]
-                self.config_data["mcpServers"] = mcp_servers
-                self._save_config(self.config_data)
-                return True
-            return False
+            # 2. Update Database
+            async with AsyncSession(async_engine) as session:
+                stmt = delete(MCPServerConfig).where(
+                    MCPServerConfig.user_id == self.user_id,
+                    MCPServerConfig.name == name
+                )
+                await session.execute(stmt)
+                await session.commit()
+            
+            # Refresh cache
+            await self._load_config_from_db()
+            return True
         except Exception as e:
             logger.error(f"Failed to remove server {name}: {e}")
             return False
-
-    def _save_config(self, config_data: dict):
-        with open(self.config_path, 'w') as f:
-            json.dump(config_data, f, indent=2)
 

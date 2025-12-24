@@ -9,7 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from sqlalchemy import text, inspect
 from src.core.config.database import async_engine, Base, Tenant, TenantConfig
-from src.core.state.models import Conversation, Message
+from src.core.state.models import Conversation, Message, User, MCPServerConfig
 
 # Import all models to ensure they are registered with Base
 # (Conversation and Message are already imported from src.core.state.models)
