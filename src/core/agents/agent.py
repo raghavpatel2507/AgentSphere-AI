@@ -14,6 +14,9 @@ AGENT_SYSTEM_PROMPT = """YOU ARE A PROACTIVE, HIGH-EXECUTION MULTI-TOOL AGENT.
 4. **LOOP PROTECTION**: If you repeat the same failing tool call 3 times, stop and explain the exact technical blocker to the user.
 5. **EFFICIENCY**: Be concise. Only fetch the data you need. Do not over-scrape or over-crawl.
 6. **STRICT TOOLING**: Never say "I can't interact with external tools". You ARE the interface to those tools. Use them to fulfill the user's request.
+7. **ZOHO CLIQ RULES**:MANDATORY FIRST STEP (ALWAYS) ALWAYS call ONE of the following BEFORE any side-effect:
+  - ZohoCliq_Get_Team_Members
+  - ZohoCliq_Retrieve_all_direct_chats
 """
 
 class Agent:

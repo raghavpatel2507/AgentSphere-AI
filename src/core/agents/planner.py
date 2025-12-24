@@ -59,17 +59,14 @@ AVAILABLE MCP SERVERS:
 {server_text}
 
 RULES:
-1. **COMMON KNOWLEDGE**: If the user asks for general information that an AI would reasonably know (e.g., historical facts, basic science, general "how-to"), RESPOND DIRECTLY. Do not use tools unless the user specifically asks for real-time or verified external data.
-2. **TOOL NECESSITY**: Only select MCP servers for:
-   - Real-time information (news, weather, stock prices).
-   - External service interaction (GitHub, Gmail, Zoho, Drive, Notion).
-   - Deep research requiring web crawling/scraping of specific websites.
-3. If the user is just chatting (hello, how are you), respond directly.
-4. Output MUST be valid JSON.
+1. **COMMON KNOWLEDGE**: If the user asks for general information (e.g., code, facts, general "how-to"), RESPOND DIRECTLY.
+2. **TOOL NECESSITY**: Only select MCP servers for real-time data or external service interaction (GitHub, Gmail, Zoho, etc.).
+3. If no tools are needed, provide a brief direct response in the "response" field. If the response is long (like code), you can set "response" to null and the system will handle it.
+4. Output MUST be valid JSON. No markdown formatting around the JSON.
 
 JSON FORMAT:
 {{
-  "response": "Your direct response if no tools needed, otherwise null",
+  "response": "Brief direct response or null",
   "servers": ["list", "of", "server", "names", "if", "tools", "needed"]
 }}
 """
@@ -79,6 +76,7 @@ JSON FORMAT:
             {"role": "user", "content": f"HISTORY:\n{self._format_history(history)}\n\nUSER QUERY: {user_input}"}
         ]
 
+        content = ""
         try:
             response = await self.llm.ainvoke(messages)
             content = response.content
@@ -88,8 +86,20 @@ JSON FORMAT:
             elif "```" in content:
                 content = content.split("```")[1].split("```")[0].strip()
             
+            # Remove any leading/trailing non-JSON characters
+            content = content.strip()
+            if not content.startswith("{"):
+                start_idx = content.find("{")
+                if start_idx != -1:
+                    content = content[start_idx:]
+            if not content.endswith("}"):
+                end_idx = content.rfind("}")
+                if end_idx != -1:
+                    content = content[:end_idx+1]
+
             plan_data = json.loads(content)
             return plan_data
         except Exception as e:
             logger.error(f"Planning failed: {e}")
-            return {"response": "I encountered an error planning your task.", "servers": []}
+            logger.error(f"Raw content that failed: {content}")
+            return {"response": None, "servers": []}

@@ -28,6 +28,7 @@ class OpenAIProvider(LLMProvider):
             model_name=config.get("model", "gpt-4o"),
             temperature=config.get("temperature", 0.7),
             openai_api_key=api_key,
+            max_tokens=config.get("max_tokens"),
             max_retries=3,
             streaming=True
         )
@@ -42,6 +43,8 @@ class OpenROuterProvider(LLMProvider):
             model=config.get("model", "gpt-4o"),
             api_key=api_key,
             base_url="https://openrouter.ai/api/v1",
+            temperature=config.get("temperature", 0.7),
+            max_tokens=config.get("max_tokens"),
             max_retries=3,
             streaming=True
         )
@@ -56,6 +59,7 @@ class GeminiProvider(LLMProvider):
             model=config.get("model", "gemini-1.5-pro"),
             temperature=config.get("temperature", 0.7),
             google_api_key=api_key,
+            max_tokens=config.get("max_tokens"),
             max_retries=3
         )
 
@@ -68,7 +72,8 @@ class ClaudeProvider(LLMProvider):
         return ChatAnthropic(
             model_name=config.get("model", "claude-3-sonnet-20240229"),
             temperature=config.get("temperature", 0.7),
-            anthropic_api_key=api_key
+            anthropic_api_key=api_key,
+            max_tokens=config.get("max_tokens")
         )
 
 class GroqProvider(LLMProvider):
@@ -81,19 +86,7 @@ class GroqProvider(LLMProvider):
             model_name=config.get("model", "llama3-70b-8192"),
             temperature=config.get("temperature", 0.7),
             groq_api_key=api_key,
-            max_retries=3
-        )
-
-class OpenROuterProvider(LLMProvider):
-    def create_model(self, config: Dict[str, Any]) -> BaseChatModel:
-        api_key = os.getenv("OPENROUTER_API_KEY")
-        if not api_key:
-            raise ValueError("OPENROUTER_API_KEY not found in environment")
-           
-        return ChatOpenAI(
-            model=config.get("model", "gpt-4o"),
-            api_key=api_key,
-            base_url="https://openrouter.ai/api/v1",
+            max_tokens=config.get("max_tokens"),
             max_retries=3
         )
 
@@ -125,11 +118,18 @@ class LLMFactory:
         import json
         
         # Default configuration from environment variables
+        # Default configuration from environment variables
+        max_tokens_env = os.getenv("LLM_MAX_TOKENS")
+        max_tokens = int(max_tokens_env) if max_tokens_env else 4096
+        # Hard cap to prevent 400 errors with some providers
+        if max_tokens > 8192:
+            max_tokens = 4096
+
         config = {
             "provider": os.getenv("LLM_PROVIDER", "openrouter"),
             "model": os.getenv("MODEL_NAME", "mistralai/mistral-large-2411"),
             "temperature": float(os.getenv("LLM_TEMPERATURE", "0.1")),
-            "max_tokens": int(os.getenv("LLM_MAX_TOKENS", "800000")) if os.getenv("LLM_MAX_TOKENS") else None
+            "max_tokens": max_tokens
         }
         
         # Try loading from multi_server_config.json if it exists (for overrides if any)
