@@ -1,378 +1,300 @@
 """
-AgentSphere-AI Main Entry Point
-
-Continuous chat interface with:
-- PostgreSQL state persistence
-- Human-in-the-loop (HITL) tool approval
-- Multi-tenant support
-- Conversation memory
+AgentSphere-AI Main Entry Point (v2.0)
 """
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
 import asyncio
 import os
-from src.core.agents.supervisor import get_app
-from src.core.agents.callbacks import AgentCallbackHandler
+import logging
+from typing import List
+from src.core.agents.planner import Planner
+from src.core.agents.agent import Agent
+from src.core.mcp.manager import MCPManager
+from src.core.llm.provider import LLMFactory
 from src.core.state import (
-    init_checkpointer, 
-    get_checkpointer, 
     get_or_create_session,
     clear_current_session,
-    get_config_for_thread
+    load_history,
+    save_history
 )
-from src.core.mcp.manager import MCPManager
 
+# Configure logging
+class ProgressFormatter(logging.Formatter):
+    def format(self, record):
+        msg = record.msg if isinstance(record.msg, str) else str(record.msg)
+        if any(x in msg for x in ["Calling tool", "Executing tool", "Running tool", "Tool:"]):
+            return f"🛠️ {msg}"
+        if any(x in msg for x in ["Tool returned", "Result:", "Output of"]):
+            return f"✅ {msg}"
+        if any(x in msg for x in ["Connected to server", "🔌"]):
+            return f"🔌 {msg}"
+        if record.levelno >= logging.ERROR:
+            return f"❌ {msg}"
+        if record.levelno >= logging.WARNING:
+            return f"⚠️ {msg}"
+        return super().format(record)
+Assistant_Prefix = "\n🤖: "
 
+handler = logging.StreamHandler()
+handler.setFormatter(ProgressFormatter('%(message)s'))
 
+# Clear and set root logger
+root = logging.getLogger()
+for h in root.handlers[:]:
+    root.removeHandler(h)
+root.addHandler(handler)
+root.setLevel(logging.WARNING)
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-def print_prompt_data(messages, title="Prompt Data"):
-    """
-    Pretty-print the messages being sent to the model.
-    This shows exactly what the supervisor receives after trimming.
-    """
-    print("\n" + "=" * 70)
-    print(f"📋 {title}")
-    print("=" * 70)
-    print(f"Total messages: {len(messages)}")
-    print()
-    
-    for idx, msg in enumerate(messages, 1):
-        msg_type = type(msg).__name__.replace("Message", "")
-        content = msg.content if hasattr(msg, "content") else str(msg)
-        
-        # Show truncated content
-        display_content = content[:200] + "..." if len(content) > 200 else content
-        
-        print(f"[{idx}] {msg_type}:")
-        print(f"    {display_content}")
-        print()
-    
-    # Rough token estimate (4 chars ≈ 1 token)
-    total_chars = sum(len(msg.content if hasattr(msg, "content") else str(msg)) for msg in messages)
-    estimated_tokens = total_chars // 4
-    print(f"Estimated tokens: ~{estimated_tokens:,}")
-    print("=" * 70)
-    print()
+# Silence only the truly noisy ones
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
 
+# keep mcp_use and src.core at INFO level for progress
+mcp_logger = logging.getLogger("mcp_use")
+mcp_logger.setLevel(logging.INFO)
+mcp_logger.propagate = True
+
+core_logger = logging.getLogger("src.core")
+core_logger.setLevel(logging.INFO)
+core_logger.propagate = True
 
 async def main():
-    """Main async function for continuous chat with HITL."""
+    """Main async function for the new AgentSphere-AI architecture."""
     
     print("=" * 60)
-    print("🤖 AgentSphere-AI - Continuous Chat with HITL")
+    print("🤖 AgentSphere-AI - Ground-Up Architecture (v2.0)")
     print("=" * 60)
-    print()
     
-    # Initialize checkpointer
-    print("🔄 Initializing PostgreSQL checkpointer...")
-    await init_checkpointer()
-    checkpointer = get_checkpointer()
+    # 1. Initialize Core Services
+    print("🔄 Initializing MCP Manager...")
+    mcp_manager = MCPManager()
+    await mcp_manager.initialize()
     
-    # Initialize dynamic agents
-    print("🔄 Initializing Dynamic Agents...")
-    from src.core.agents.agent import get_dynamic_agents, dynamic_experts
-    experts = await get_dynamic_agents()
-    dynamic_experts.update(experts)
-    print(f"✅ Initialized {len(experts)} dynamic experts")
+    # 2. Setup LLM and Components
+    llm = LLMFactory.load_config_and_create_llm()
     
-    # Get supervisor app with checkpointer
-    # Note: get_app calls create_workflow which uses the now-populated dynamic_experts
-    app = get_app(checkpointer=checkpointer)
+    planner = Planner(api_key=os.getenv("OPENROUTER_API_KEY"))
+    # DO NOT initialize agent here, we do it per-turn to refresh tools
     
-    # Setup tenant and get/create session
-    tenant_id = os.getenv("DEFAULT_TENANT_ID", "default")
+    # 3. Session Management
+    # For thread_id creation, use simple string
+    tenant_name = os.getenv("DEFAULT_TENANT_NAME", "default")
+    thread_id, is_new = get_or_create_session(tenant_name)
     
-    # Smart session management: resume existing or create new
-    thread_id, is_new = get_or_create_session(tenant_id)
-    config = get_config_for_thread(thread_id)
+    # For database operations, use UUIDs
+    tenant_id = os.getenv("DEFAULT_TENANT_ID", "550e8400-e29b-41d4-a716-446655440000")
+    user_id = os.getenv("DEFAULT_USER_ID", "550e8400-e29b-41d4-a716-446655440001")
     
-    print(f"✅ Checkpointer initialized")
+    # Validate UUIDs
+    try:
+        from uuid import UUID
+        UUID(tenant_id)  # Validate tenant_id
+        UUID(user_id)    # Validate user_id
+    except ValueError as e:
+        print(f"\n❌ Invalid UUID configuration!")
+        print(f"   tenant_id: '{tenant_id}'")
+        print(f"   user_id: '{user_id}'")
+        print(f"   Error: {e}")
+        print(f"\n💡 Please set valid UUIDs in your .env file:")
+        print(f"   DEFAULT_TENANT_ID=550e8400-e29b-41d4-a716-446655440000")
+        print(f"   DEFAULT_USER_ID=550e8400-e29b-41d4-a716-446655440001\n")
+        await mcp_manager.cleanup()
+        return
+    except Exception as e:
+        print(f"\n❌ Initialization Error: {e}")
+        return
+    
+    # 4. Load History from DB
+    history = await load_history(thread_id, tenant_id, user_id)
+    
     print(f"📝 Thread ID: {thread_id}")
-    if is_new:
-        print(f"✨ Started NEW conversation")
-    else:
-        print(f"🔄 RESUMED existing conversation")
-    print()
-    print("Commands:")
-    print("  /exit - Exit the chat")
-    print("  /new  - Start a new conversation (fresh thread)")
-    print("  /history - Show conversation history")
-    print()
-  
-    print()
-    
-    # Callback handler
-    agent_callback = AgentCallbackHandler()
-    config["callbacks"] = [agent_callback]
-    
-    # Continuous chat loop
+    print(f"{'✨ Started NEW' if is_new else '🔄 RESUMED'} conversation")
+    print(f"📜 Loaded {len(history)} previous messages")
+    print("\nCommands: /exit, /new, /history, /tools\n")
+
+    # 5. Continuous Chat Loop
     while True:
         try:
-            # Get user input
             user_input = input("You: ").strip()
+            if not user_input: continue
             
-            if not user_input:
-                continue
-            
-            # Handle commands
+            # Command Handling
             if user_input.lower() == "/exit":
-                print("\n👋 Goodbye!\n")
-                # Cleanup MCP connections before exit
-                print("🔄 Cleaning up MCP connections...")
-                manager = MCPManager()
-                await manager.cleanup()
-                print("✅ Cleanup complete\n")
+                print("\n👋 Goodbye!")
+                await mcp_manager.cleanup()
                 break
             
             elif user_input.lower() == "/new":
-                # Start new conversation with new thread ID
-                clear_current_session()  # Clear old session
-                thread_id, _ = get_or_create_session(tenant_id)  # Create fresh one
-                config = get_config_for_thread(thread_id)
-                config["callbacks"] = [agent_callback]
+                clear_current_session()
+                thread_id, _ = get_or_create_session(tenant_id)
+                history = []
                 print(f"\n✨ Started new conversation: {thread_id}\n")
                 continue
             
             elif user_input.lower() == "/history":
-                # Show conversation history
-                state = await app.aget_state(config)
-                if state.values.get("messages"):
-                    print("\n📜 Conversation History:")
-                    print("-" * 60)
-                    for msg in state.values["messages"]:
-                        # Handle LangChain message objects properly
-                        # Messages are AIMessage, HumanMessage, SystemMessage, etc.
-                        msg_type = type(msg).__name__.replace("Message", "").upper()
-                        content = msg.content if hasattr(msg, "content") else str(msg)
-                        
-                        # Truncate long messages for display
-                        display_content = content[:100] + "..." if len(content) > 100 else content
-                        print(f"{msg_type}: {display_content}")
-                    print("-" * 60)
-                    print(f"\nTotal messages: {len(state.values['messages'])}")
-                    print()
-                else:
-                    print("\n📜 No conversation history yet.\n")
+                print("\n📜 Conversation History:")
+                for msg in history:
+                    role = "USER" if msg.type == "human" else "AGENT"
+                    print(f"[{role}]: {msg.content[:150]}...")
+                print()
                 continue
-            
-            # Get current state to show what will be sent to supervisor
-            current_state = await app.aget_state(config)
-            current_messages = current_state.values.get("messages", [])
-            
-            # Show prompt data for verification
-            print("\n" + "🔍 " * 35)
-            print("BEFORE TRIMMING:")
-            print(f"Total messages in database: {len(current_messages)}")
-            print("🔍 " * 35)
-            
-            # Invoke supervisor with proper error handling
-            try:
-                result = await app.ainvoke(
-                    {"messages": [{"role": "user", "content": user_input}]},
-                    config=config
-                )
-                
-                # Show what was actually sent after trimming
-                post_state = await app.aget_state(config)
-                post_messages = post_state.values.get("messages", [])
-                
-                print("\n" + "📤 " * 35)
-                print("AFTER TRIMMING (Actual prompt sent to model):")
-                print_prompt_data(post_messages, "Messages Sent to Supervisor")
-                print("📤 " * 35)
-                
-            except Exception as e:
-                error_msg = str(e)
-                
-                # Handle different types of errors with user-friendly messages
-                if "413" in error_msg or "too large" in error_msg.lower():
-                    print("\n" + "=" * 70)
-                    print("❌ REQUEST TOO LARGE ERROR")
-                    print("=" * 70)
-                    print("\n📏 Your request exceeds the model's token limit.\n")
-                    print("📋 Quick Fix:")
-                    print("  1. Edit your .env file")
-                    print("  2. Change MAX_TOKENS to a lower value:")
-                    print("     MAX_TOKENS=6000  # For openai/gpt-oss-120b")
-                    print("  3. Restart the application")
-                    print("\n💡 Better Solution - Switch to a model with higher limits:")
-                    print("  - llama-3.1-70b-tool-use (128k context)")
-                    print("  - llama-3.3-70b-versatile (128k context)")
-                    print("  - gemini-2.0-flash-exp (1M context, free!)")
-                    print("\n⚠️  Current model (openai/gpt-oss-120b) has only 8k limit - too small!")
-                    print("=" * 70)
-                    
-                elif "429" in error_msg or "quota" in error_msg.lower():
-                    print("\n" + "=" * 70)
-                    print("❌ QUOTA/RATE LIMIT ERROR")
-                    print("=" * 70)
-                    print("\n🚫 Your API quota is exceeded or rate limit hit.\n")
-                    print("📋 Possible Solutions:")
-                    print("  1. Check your OpenAI billing: https://platform.openai.com/usage")
-                    print("  2. Add funds to your account")
-                    print("  3. Wait a moment and try again (rate limit may reset)")
-                    print("  4. Switch to a different model in .env:")
-                    print("     - Change MODEL_NAME to 'gpt-3.5-turbo' (cheaper)")
-                    print("     - Or use Groq/Gemini (free tier available)")
-                    print("\n💡 To switch models:")
-                    print("  1. Edit .env file")
-                    print("  2. Uncomment a different model in src/core/agents/model.py")
-                    print("  3. Restart the application")
-                    print("=" * 70)
-                    
-                elif "401" in error_msg or "unauthorized" in error_msg.lower() or "api" in error_msg.lower() and "key" in error_msg.lower():
-                    print("\n" + "=" * 70)
-                    print("❌ API KEY ERROR")
-                    print("=" * 70)
-                    print("\n🔑 Your API key is invalid or missing.\n")
-                    print("📋 Solutions:")
-                    print("  1. Check your .env file has correct API key")
-                    print("  2. Verify key at: https://platform.openai.com/api-keys")
-                    print("  3. Make sure .env is loaded (should be in project root)")
-                    print("=" * 70)
-                    
-                elif "timeout" in error_msg.lower() or "connection" in error_msg.lower():
-                    print("\n" + "=" * 70)
-                    print("❌ NETWORK/CONNECTION ERROR")
-                    print("=" * 70)
-                    print("\n🌐 Network connection issue.\n")
-                    print("📋 Solutions:")
-                    print("  1. Check your internet connection")
-                    print("  2. Try again in a moment")
-                    print("  3. Check if OpenAI API is down: https://status.openai.com")
-                    print("=" * 70)
-                    
-                elif "context_length" in error_msg.lower() or "token" in error_msg.lower():
-                    print("\n" + "=" * 70)
-                    print("❌ TOKEN LIMIT ERROR")
-                    print("=" * 70)
-                    print("\n📏 Message context too long.\n")
-                    print("📋 Solutions:")
-                    print("  1. Lower MAX_TOKENS in .env (try 50000)")
-                    print("  2. Start a new conversation with /new")
-                    print("  3. Use a model with larger context window")
-                    print("=" * 70)
-                    
-                else:
-                    # Generic error
-                    print("\n" + "=" * 70)
-                    print("❌ UNEXPECTED ERROR")
-                    print("=" * 70)
-                    print(f"\n💥 Error: {error_msg[:200]}")
-                    print("\n📋 Suggestions:")
-                    print("  1. Try your request again")
-                    print("  2. Use /new to start fresh conversation")
-                    print("  3. Check logs above for details")
-                    print("=" * 70)
-                
-                # Continue the conversation loop
+
+            elif user_input.lower().startswith("/tools"):
+                status = await mcp_manager.get_all_tools_status()
+                print("\n🛠️  MCP Servers Status:")
+                for s_name, s_info in status.items():
+                    conn = "✅" if s_info['connected'] else "❌"
+                    print(f"- {s_name}: {conn} ({s_info['tools_count']} tools)")
                 print()
                 continue
             
-            # Check if workflow is interrupted (waiting for approval)
-            state = await app.aget_state(config)
+            # --- PLANNING & EXECUTION PHASE ---
+            print("\n🤔 Planning...", end="", flush=True)
+            available_servers = await mcp_manager.get_all_tools_status()
             
-            while state.next:  # While there are pending nodes
-                print("\n" + "=" * 60)
-                print("⚠️  HUMAN-IN-THE-LOOP: Tool Execution Requires Approval")
-                print("=" * 60)
-                
-                # Show pending tasks
-                if state.tasks:
-                    print(f"\n📋 Pending Action: {len(state.tasks)} tool(s) waiting for approval")
-                    for task in state.tasks:
-                        print(f"   - {task}")
-                
-                # Request approval
-                print("\nOptions:")
-                print("  [y] Approve and continue")
-                print("  [n] Reject and stop")
-                print("  [m] Modify parameters (advanced)")
-                
-                approval = input("\nYour decision: ").strip().lower()
-                
-                if approval == "y":
-                    print("\n✅ Approved! Continuing execution...\n")
-                    # Resume execution by passing None
-                    result = await app.ainvoke(
-                        None,
-                        config=config
-                    )
-                    # Check state again
-                    state = await app.aget_state(config)
-                
-                elif approval == "n":
-                    print("\n❌ Rejected! Stopping execution.\n")
-                    break
-                
-                elif approval == "m":
-                    print("\n⚙️  Parameter modification not yet implemented.\n")
-                    print("Approving with original parameters...\n")
-                    result = await app.ainvoke(
-                        None,
-                        config=config
-                    )
-                    state = await app.aget_state(config)
-                
+            plan = None
+            full_direct_response = ""
+            prefix_printed = False
+            
+            async for chunk in planner.plan(user_input, history, available_servers):
+                if isinstance(chunk, str):
+                    if not prefix_printed:
+                        print("\n🤖: ", end="", flush=True)
+                        prefix_printed = True
+                    print(chunk, end="", flush=True)
+                    full_direct_response += chunk
                 else:
-                    print("\n❓ Invalid input. Please enter 'y', 'n', or 'm'.\n")
-            
-            # Display final response
-            print("\n" + "=" * 60)
-            print("🤖 Assistant Response:")
-            print("=" * 60)
-            
-            if result.get("messages"):
-                last_message = result["messages"][-1]
-                if hasattr(last_message, "content"):
-                    content = last_message.content
+                    plan = chunk
+
+            if plan.get("servers"):
+                if not prefix_printed:
+                    print(f" Routing to servers: {', '.join(plan['servers'])}")
+                
+                # Instant Connection
+                await mcp_manager.connect_to_servers(plan['servers'])
+                if mcp_manager._mcp_client:
+                    mcp_manager._mcp_client.allowed_servers = list(plan['servers'])
+                
+                # Get wrapped tools (with HITL guards)
+                tools = await mcp_manager.get_tools_for_servers(plan['servers'])
+                
+                # Re-create agent with wrapped tools
+                agent = Agent(llm=llm, mcp_client=mcp_manager._mcp_client, tools=tools)
+                
+                if not prefix_printed:
+                    print("\n🤔 Thinking and using tools...\n", flush=True)
+                    print("\n🤖: ", end="", flush=True)
+                    prefix_printed = True
+                
+                from langchain_core.messages import HumanMessage, AIMessage
+                history.append(HumanMessage(content=user_input))
+                
+                full_agent_response = ""
+                async for event in agent.execute_streaming(user_input, history[:-1]):
+                    etype = event.get("type")
                     
-                    # Handle structured content (list of dicts with text/extras)
-                    if isinstance(content, list):
-                        # Extract text from each item
-                        text_parts = []
-                        for item in content:
-                            if isinstance(item, dict) and "text" in item:
-                                text_parts.append(item["text"])
-                            elif isinstance(item, str):
-                                text_parts.append(item)
-                            else:
-                                text_parts.append(str(item))
-                        print(f"\n{' '.join(text_parts)}\n")
-                    else:
-                        # Simple string content
-                        print(f"\n{content}\n")
-
-                else:
-                    print(f"\n{last_message}\n")
+                    if etype == "token":
+                        content = event.get("content", "")
+                        print(content, end="", flush=True)
+                        full_agent_response += content
+                    
+                    elif etype == "tool_start":
+                        t_name = event.get("tool")
+                        print(f"\n🛠️ Calling tool: {t_name}...")
+                    
+                    elif etype == "tool_end":
+                        t_name = event.get("tool")
+                        print(f"✅ {t_name} complete.")
+                    
+                    elif etype == "approval_required":
+                        print(f"\n\n🛑 APPROVAL REQUIRED: {event['tool_name']}")
+                        print(f"Arguments: {event['tool_args']}")
+                        print(f"Message: {event['message']}")
+                        
+                        choice = input("\n✅ Approve execution? (y/n): ").strip().lower()
+                        if choice == 'y':
+                            mcp_manager.whitelist_tool(event['tool_name'], event['tool_args'])
+                            print("🚀 Resuming execution...")
+                            # Restart the generator with the SAME history and input
+                            # The whitelist ensures it won't trigger again
+                            full_agent_response = ""
+                            async for sub_event in agent.execute_streaming(user_input, history[:-1]):
+                                sex_type = sub_event.get("type")
+                                if sex_type == "token":
+                                    content = sub_event.get("content", "")
+                                    print(content, end="", flush=True)
+                                    full_agent_response += content
+                                elif sex_type == "tool_start":
+                                    print(f"\n🛠️ Calling tool: {sub_event.get('tool')}...")
+                                elif sex_type == "tool_end":
+                                    print(f"✅ {sub_event.get('tool')} complete.")
+                                elif sex_type == "error":
+                                    print(f"\n❌ Error during resumed execution: {sub_event.get('message')}")
+                                    full_agent_response += f"\n❌ Error: {sub_event.get('message')}"
+                            break
+                        else:
+                            print("❌ Execution rejected.")
+                            full_agent_response += f"\n[User rejected execution of {event['tool_name']}]"
+                            # We stop here for this turn
+                            break
+                
+                print("\n")
+                history.append(AIMessage(content=full_agent_response))
+            else:
+                # Direct response already streamed from Planner if response was present
+                if not prefix_printed and plan.get("response"):
+                     print(f"\n🤖: {plan['response']}")
+                
+                print("\n")
+                from langchain_core.messages import HumanMessage, AIMessage
+                history.append(HumanMessage(content=user_input))
+                history.append(AIMessage(content=plan.get("response", full_direct_response)))
             
-            print("=" * 60)
-            print()
-        
+            # --- PERSISTENCE PHASE ---
+            await save_history(thread_id, tenant_id, user_id, history)
+
         except KeyboardInterrupt:
-            print("\n\n👋 Interrupted by user. Goodbye!\n")
-            # Cleanup MCP connections before exit
-            print("🔄 Cleaning up MCP connections...")
-            manager = MCPManager()
-            await manager.cleanup()
-            print("✅ Cleanup complete\n")
+            print("\n\n👋 Interrupted. Goodbye!")
             break
-        
         except Exception as e:
-            print(f"\n❌ Error: {str(e)}\n")
-            import traceback
-            traceback.print_exc()
-            print()
+            # Suppress noisy cancel scope errors during turn processing
+            if "cancel scope" not in str(e):
+                print(f"\n❌ Error: {str(e)}")
+                import traceback
+                traceback.print_exc()
+        finally:
+             # Regular cleanup
+             pass
+             
+    # Final cleanup before exiting main()
+    try:
+        await mcp_manager.cleanup()
+    except Exception:
+        pass
 
-
-def sync_main():
-    """Synchronous wrapper for async main."""
-    if os.name == 'nt':
-        # Windows workaround for psycopg: use SelectorEventLoop
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    
-    asyncio.run(main())
-
+def custom_exception_handler(loop, context):
+    exception = context.get("exception")
+    # Mask anyio/mcp-use internal cleanup noise
+    if exception and isinstance(exception, (RuntimeError, Exception)):
+        exc_str = str(exception)
+        if "cancel scope" in exc_str or "session" in exc_str:
+            return
+    loop.default_exception_handler(context)
 
 if __name__ == "__main__":
-    sync_main()
+    if os.name == 'nt':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.set_exception_handler(custom_exception_handler)
+    
+    try:
+        loop.run_until_complete(main())
+    finally:
+        loop.close()

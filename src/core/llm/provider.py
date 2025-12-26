@@ -28,7 +28,22 @@ class OpenAIProvider(LLMProvider):
             model_name=config.get("model", "gpt-4o"),
             temperature=config.get("temperature", 0.7),
             openai_api_key=api_key,
-            max_retries=3
+            max_retries=3,
+            streaming=True
+        )
+
+class OpenROuterProvider(LLMProvider):
+    def create_model(self, config: Dict[str, Any]) -> BaseChatModel:
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            raise ValueError("OPENROUTER_API_KEY not found in environment")
+            
+        return ChatOpenAI(
+            model=config.get("model", "gpt-4o"),
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            max_retries=3,
+            streaming=True
         )
 
 class GeminiProvider(LLMProvider):
@@ -41,7 +56,8 @@ class GeminiProvider(LLMProvider):
             model=config.get("model", "gemini-1.5-pro"),
             temperature=config.get("temperature", 0.7),
             google_api_key=api_key,
-            max_retries=3
+            max_retries=3,
+            streaming=True
         )
 
 class ClaudeProvider(LLMProvider):
@@ -53,7 +69,8 @@ class ClaudeProvider(LLMProvider):
         return ChatAnthropic(
             model_name=config.get("model", "claude-3-sonnet-20240229"),
             temperature=config.get("temperature", 0.7),
-            anthropic_api_key=api_key
+            anthropic_api_key=api_key,
+            streaming=True
         )
 
 class GroqProvider(LLMProvider):
@@ -66,7 +83,8 @@ class GroqProvider(LLMProvider):
             model_name=config.get("model", "llama3-70b-8192"),
             temperature=config.get("temperature", 0.7),
             groq_api_key=api_key,
-            max_retries=3
+            max_retries=3,
+            streaming=True
         )
 
 class LLMFactory:
@@ -80,7 +98,8 @@ class LLMFactory:
             "openai": OpenAIProvider(),
             "gemini": GeminiProvider(),
             "claude": ClaudeProvider(),
-            "groq": GroqProvider()
+            "groq": GroqProvider(),
+            "openrouter": OpenROuterProvider()
         }
         
         provider = providers.get(provider_name)
@@ -88,3 +107,31 @@ class LLMFactory:
             raise ValueError(f"Unsupported LLM provider: {provider_name}")
             
         return provider.create_model(config)
+
+    @staticmethod
+    def load_config_and_create_llm(config_path: str = "multi_server_config.json") -> BaseChatModel:
+        """Loads config from file or env and creates LLM."""
+        import json
+        
+        # Default configuration from environment variables
+        config = {
+            "provider": os.getenv("LLM_PROVIDER", "openrouter"),
+            "model": os.getenv("MODEL_NAME", "mistralai/mistral-large-2411"),
+            "temperature": float(os.getenv("LLM_TEMPERATURE", "0.1")),
+            "max_tokens": int(os.getenv("LLM_MAX_TOKENS", "800000")) if os.getenv("LLM_MAX_TOKENS") else None
+        }
+        
+        # Try loading from multi_server_config.json if it exists (for overrides if any)
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    full_config = json.load(f)
+                    # extending support if user still wants to put llm config in multi_server_config.json
+                    llm_settings = full_config.get("llm", {})
+                    if llm_settings:
+                        config.update(llm_settings)
+                        logger.info(f"Updated LLM config from {config_path}: {llm_settings}")
+            except Exception as e:
+                logger.warning(f"Error loading LLM config from {config_path}: {e}")
+            
+        return LLMFactory.create_llm(config)

@@ -7,8 +7,7 @@ This guide covers the complete setup for the PostgreSQL persistence layer in Age
 Ensure the following packages are installed (managed via `requirements.txt` or `pyproject.toml`):
 
 - **Core Database**: `sqlalchemy`, `alembic`
-- **Drivers**: `asyncpg` (for async operations), `psycopg[binary]` (for LangGraph checkpointer)
-- **LangGraph**: `langgraph-checkpoint-postgres`
+- **Drivers**: `asyncpg` (for async operations)
 
 ## 2. Environment Configuration
 
@@ -31,39 +30,26 @@ DEFAULT_TENANT_API_KEY=dev_api_key_12345
 ## 3. Database Initialization
 
 ### Step A: Create Database
-Ensure your PostgreSQL server is running and create the database:
-```bash
-createdb agentsphere
-```
+Ensure your PostgreSQL server is running and create the database named `agentsphere`.
 
-### Step B: Run Migrations
-Initialize the schema (tables for tenants, configs, etc.):
+### Step B: Run Initial Setup
+The system will automatically attempt to initialize tables on startup. However, the recommended way to ensure the schema and default seed data are ready is to run:
 ```bash
 alembic upgrade head
 ```
-
-### Step C: Initialize Default Tenant
-Create the default tenant and thread for local testing:
-```bash
-python scripts/init_default_tenant.py
-```
-
-### Step D: Migrate Configurations (Optional)
-Move existing JSON configs (like `gmail_token.json`) to the database:
-```bash
-python scripts/migrate_configs_to_db.py
-```
+This command will create all tables (`tenants`, `tenant_configs`, `conversations`, `messages`) and insert a default dev tenant.
 
 ## 4. How It Works
 
 ### Architecture
 - **Multi-Tenancy**: Data is isolated by `tenant_id`.
-- **Persistence**: LangGraph state (chat history) is stored in `checkpoints` table.
+- **Persistence**: Conversation history is stored in `conversations` and `messages` tables.
 - **Configuration**: Tenant settings (API keys, tokens) are stored in `tenant_configs` table.
 
 ### Key Files
 - `src/core/config/database.py`: SQLAlchemy models and connection logic.
-- `src/core/state/checkpointer.py`: LangGraph checkpointer setup.
+- `src/core/state/conversation_store.py`: Direct database operations for messages.
+- `src/core/state/thread_manager.py`: Thread and session management.
 - `src/core/config/tenant_config.py`: Manager for loading configs from DB.
 
 ## 5. Usage in Code
@@ -77,4 +63,4 @@ python main.py
 This will:
 1. Connect to PostgreSQL.
 2. Load the default tenant.
-3. Resume conversation from the last checkpoint (if any).
+3. Resume conversation from the last session (if any).
