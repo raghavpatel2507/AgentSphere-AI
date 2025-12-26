@@ -32,14 +32,38 @@ export function useSession() {
         localStorage.removeItem(STORAGE_KEY);
       }
 
-      const newSession = await createSession(TENANT_ID, USER_ID, forceNew);
-      setSession(newSession);
-      localStorage.setItem(STORAGE_KEY, newSession.session_id);
+      // 1. Fetch existing sessions first
+      const list = await listSessions(TENANT_ID, USER_ID);
+      setSessions(list);
 
-      if (!newSession.is_new) {
+      let sessionIdToLoad = localStorage.getItem(STORAGE_KEY);
+      let sessionToLoad = null;
+
+      // 2. Determine which session to load
+      if (!forceNew && list.length > 0) {
+        if (sessionIdToLoad) {
+          // Check if stored session still exists
+          sessionToLoad = list.find(s => s.session_id === sessionIdToLoad);
+        }
+
+        // If no stored session or it doesn't exist anymore, pick the latest
+        if (!sessionToLoad) {
+          sessionToLoad = list[0];
+          sessionIdToLoad = sessionToLoad.session_id;
+          localStorage.setItem(STORAGE_KEY, sessionIdToLoad);
+        }
+      }
+
+      // 3. Create or resume session
+      const currentSession = await createSession(TENANT_ID, USER_ID, forceNew, sessionIdToLoad || undefined);
+      setSession(currentSession);
+      localStorage.setItem(STORAGE_KEY, currentSession.session_id);
+
+      // 4. Load history
+      if (!currentSession.is_new) {
         try {
           const history = await getSessionHistory(
-            newSession.session_id,
+            currentSession.session_id,
             TENANT_ID,
             USER_ID
           );
@@ -50,9 +74,6 @@ export function useSession() {
       } else {
         setMessages([]);
       }
-
-      // Refresh session list
-      fetchSessions();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to initialize session';
       setError(errorMessage);

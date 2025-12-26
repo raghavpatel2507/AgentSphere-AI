@@ -22,6 +22,13 @@ export function ChatInput({ onSend, disabled, isStreaming, placeholder }: ChatIn
     }
   }, [value]);
 
+  // Autofocus when enabled
+  useEffect(() => {
+    if (!disabled && !isStreaming) {
+      textareaRef.current?.focus();
+    }
+  }, [disabled, isStreaming]);
+
   const handleSubmit = () => {
     if (value.trim() && !disabled) {
       onSend(value);

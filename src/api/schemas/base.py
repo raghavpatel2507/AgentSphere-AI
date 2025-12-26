@@ -15,6 +15,7 @@ class ChatResponse(BaseModel):
 class SessionCreate(BaseModel):
     tenant_id: str = Field(..., description="Tenant identifier")
     user_id: str = Field(..., description="User identifier")
+    session_id: Optional[str] = Field(default=None, description="Optional session ID to resume")
     force_new: Optional[bool] = Field(default=False, description="Whether to force a new session")
 
 class SessionResponse(BaseModel):

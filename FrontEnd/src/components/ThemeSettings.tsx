@@ -23,9 +23,11 @@ interface ThemeSettingsProps {
 
 const PRESET_THEMES = [
     { name: 'Midnight', primary: '199 89% 48%', accent: '346 84% 61%', bg: '/chat-bg.png' },
-    { name: 'Ocean', primary: '210 100% 50%', accent: '180 100% 50%', bg: 'https://images.unsplash.com/photo-1505118380757-91f5f45d8de4?auto=format&fit=crop&w=1200' },
-    { name: 'Forest', primary: '142 76% 36%', accent: '38 92% 50%', bg: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200' },
-    { name: 'Sunset', primary: '24 100% 50%', accent: '346 84% 61%', bg: 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1200' },
+    { name: 'Ocean', primary: '210 100% 50%', accent: '180 100% 50%', bg: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200' },
+    { name: 'Nature', primary: '142 76% 36%', accent: '38 92% 50%', bg: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200' },
+    { name: 'Desert', primary: '24 100% 50%', accent: '346 84% 61%', bg: 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1200' },
+    { name: 'Cyber', primary: '280 100% 70%', accent: '320 100% 60%', bg: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1200' },
+    { name: 'Aurora', primary: '160 100% 50%', accent: '200 100% 50%', bg: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?auto=format&fit=crop&w=1200' },
 ];
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
@@ -100,66 +102,77 @@ export function ThemeSettings({ open, onOpenChange }: ThemeSettingsProps) {
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[900px] bg-card border-border shadow-2xl rounded-[2rem] overflow-hidden p-0 gap-0">
-                <Tabs defaultValue="background" className="w-full">
-                    <div className="flex h-[600px]">
+            <DialogContent className="sm:max-w-[900px] w-[95vw] md:w-full bg-card border-border shadow-2xl rounded-[1.5rem] md:rounded-[2rem] overflow-hidden p-0 gap-0 max-h-[90vh] flex flex-col">
+                <Tabs defaultValue="background" className="w-full flex-1 flex flex-col min-h-0">
+                    <div className="flex flex-col md:flex-row flex-1 min-h-0">
                         {/* Sidebar for Tabs */}
-                        <div className="w-64 border-r border-border bg-muted/30 p-6 flex flex-col gap-6">
-                            <div>
-                                <h2 className="text-xl font-bold flex items-center gap-2 mb-1">
-                                    <Palette className="w-5 h-5 text-primary" />
-                                    Appearance
-                                </h2>
-                                <p className="text-xs text-muted-foreground">Customize your workspace</p>
+                        <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-border bg-muted/30 p-4 md:p-6 flex flex-col gap-4 md:gap-6 shrink-0">
+                            <div className="flex flex-row md:flex-col items-center md:items-start justify-start gap-4">
+                                <div className="flex items-center gap-2">
+                                    <DialogTitle className="text-lg md:text-xl font-bold flex items-center gap-2 mb-0 md:mb-1">
+                                        <Palette className="w-5 h-5 text-primary" />
+                                        Appearance
+                                    </DialogTitle>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={resetTheme}
+                                        className="md:hidden p-2 h-8 w-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                                        title="Reset Defaults"
+                                    >
+                                        <RotateCcw className="w-4 h-4" />
+                                    </Button>
+                                    <p className="hidden md:block text-xs text-muted-foreground">Customize your workspace</p>
+                                </div>
                             </div>
 
-                            <div className="w-full flex-1 flex flex-col">
-                                <TabsList className="flex flex-col h-auto bg-transparent p-0 gap-2">
+                            <div className="w-full flex-1">
+                                <TabsList className="flex flex-row md:flex-col h-auto bg-transparent p-0 gap-1 md:gap-2 overflow-x-auto scrollbar-hide">
                                     <TabsTrigger
                                         value="background"
-                                        className="w-full justify-start gap-3 px-4 py-3 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all"
+                                        className="flex-1 md:w-full justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all text-xs md:text-sm"
                                     >
-                                        <ImageIcon className="w-4 h-4" />
-                                        Background
+                                        <ImageIcon className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                                        <span className="whitespace-nowrap">Background</span>
                                     </TabsTrigger>
                                     <TabsTrigger
                                         value="appearance"
-                                        className="w-full justify-start gap-3 px-4 py-3 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all"
+                                        className="flex-1 md:w-full justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all text-xs md:text-sm"
                                     >
-                                        <Palette className="w-4 h-4" />
-                                        Appearance
+                                        <Palette className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                                        <span className="whitespace-nowrap">Colors</span>
                                     </TabsTrigger>
                                     <TabsTrigger
                                         value="fonts"
-                                        className="w-full justify-start gap-3 px-4 py-3 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all"
+                                        className="flex-1 md:w-full justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all text-xs md:text-sm"
                                     >
-                                        <Type className="w-4 h-4" />
-                                        Typography
+                                        <Type className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                                        <span className="whitespace-nowrap">Fonts</span>
                                     </TabsTrigger>
                                 </TabsList>
+                            </div>
 
-                                <div className="mt-auto pt-6 border-t border-border">
-                                    <Button
-                                        variant="ghost"
-                                        onClick={resetTheme}
-                                        className="w-full justify-start gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted"
-                                    >
-                                        <RotateCcw className="w-4 h-4" />
-                                        Reset Defaults
-                                    </Button>
-                                </div>
+                            <div className="hidden md:block mt-auto pt-6 border-t border-border">
+                                <Button
+                                    variant="ghost"
+                                    onClick={resetTheme}
+                                    className="w-full justify-start gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted"
+                                >
+                                    <RotateCcw className="w-4 h-4" />
+                                    Reset Defaults
+                                </Button>
                             </div>
                         </div>
 
                         {/* Main Content Area */}
-                        <div className="flex-1 flex flex-col min-w-0">
-                            <div className="flex-1 overflow-y-auto p-8">
-                                <TabsContent value="background" className="mt-0 space-y-8 h-full">
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
+                        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+                            <div className="flex-1 overflow-y-auto p-4 md:p-8 scrollbar-premium">
+                                <TabsContent value="background" className="mt-0 space-y-6 md:space-y-8">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                                         {/* Left: Theme Selection */}
                                         <div className="space-y-4">
-                                            <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Select a Theme</Label>
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <Label className="text-[10px] md:text-sm font-bold uppercase tracking-wider text-muted-foreground">Select a Theme</Label>
+                                            <div className="grid grid-cols-2 gap-3 md:gap-4">
                                                 {[...PRESET_THEMES, ...(settings.customThemes || [])].map((t) => (
                                                     <button
                                                         key={t.name}
@@ -190,9 +203,9 @@ export function ThemeSettings({ open, onOpenChange }: ThemeSettingsProps) {
                                         </div>
 
                                         {/* Right: Add New */}
-                                        <div className="space-y-8 border-l border-border pl-8">
+                                        <div className="space-y-6 md:space-y-8 md:border-l border-border md:pl-8">
                                             <div className="space-y-4">
-                                                <Label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Custom Background</Label>
+                                                <Label className="text-[10px] md:text-sm font-bold uppercase tracking-wider text-muted-foreground">Custom Background</Label>
 
                                                 <div className="space-y-6">
                                                     {/* Upload Box */}
@@ -346,8 +359,8 @@ export function ThemeSettings({ open, onOpenChange }: ThemeSettingsProps) {
                                 </TabsContent>
                             </div>
 
-                            <div className="p-6 border-t border-border bg-muted/10 flex justify-end">
-                                <Button onClick={() => onOpenChange(false)} className="rounded-xl px-12 h-11 font-bold shadow-lg shadow-primary/20">
+                            <div className="p-4 md:p-6 border-t border-border bg-muted/10 flex justify-end">
+                                <Button onClick={() => onOpenChange(false)} className="rounded-xl w-full md:w-auto md:px-12 h-11 font-bold shadow-lg shadow-primary/20">
                                     Done
                                 </Button>
                             </div>
@@ -355,6 +368,6 @@ export function ThemeSettings({ open, onOpenChange }: ThemeSettingsProps) {
                     </div>
                 </Tabs>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     );
 }

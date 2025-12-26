@@ -63,7 +63,7 @@ export function ChatArea({
       {/* Messages Area */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-6 py-6 scrollbar-premium relative z-10"
+        className="flex-1 overflow-y-auto px-4 md:px-6 py-6 scrollbar-premium relative z-10"
       >
         {loading ? (
           <div className="max-w-5xl mx-auto">
@@ -80,7 +80,7 @@ export function ChatArea({
             </p>
           </div>
         ) : (
-          <div className="max-w-5xl mx-auto space-y-4">
+          <div className="max-w-5xl mx-auto space-y-4 px-2 sm:px-0">
             {messages.map((msg, index) => (
               <ChatMessage
                 key={index}

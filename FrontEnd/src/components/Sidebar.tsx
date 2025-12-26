@@ -18,7 +18,7 @@ export function Sidebar({
   onDeleteSession,
 }: SidebarProps) {
   return (
-    <aside className="w-72 h-screen glass-sidebar flex flex-col">
+    <aside className="w-full h-full glass-sidebar flex flex-col border-none">
       {/* Logo */}
       <div className="p-6">
         <div className="flex items-center gap-3">
@@ -33,14 +33,15 @@ export function Sidebar({
       <div className="px-4 mb-6">
         <Button
           onClick={onNewSession}
-          variant="outline"
           className={cn(
-            "w-full justify-start gap-3 h-12 rounded-xl font-medium border-dashed border-2",
-            "hover:bg-primary/5 hover:border-primary/50 hover:text-primary transition-all duration-300"
+            "w-full justify-start gap-3 h-14 rounded-2xl font-bold glass-modern-btn",
+            "hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 group"
           )}
         >
-          <Plus className="w-5 h-5" />
-          New Chat
+          <div className="w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-lg group-hover:rotate-90 transition-transform duration-500">
+            <Plus className="w-5 h-5" />
+          </div>
+          <span className="tracking-tight">New Conversation</span>
         </Button>
       </div>
 
@@ -57,17 +58,20 @@ export function Sidebar({
               <button
                 onClick={() => onSwitchSession(s.session_id)}
                 className={cn(
-                  "w-full text-left px-4 py-3 rounded-xl text-sm transition-all duration-200 flex items-center gap-3 pr-10",
+                  "w-full text-left px-4 py-4 rounded-xl text-sm transition-all duration-300 flex items-center gap-3 pr-12 relative group/item",
                   currentSessionId === s.session_id
-                    ? "bg-primary/10 text-primary font-semibold border border-primary/20"
-                    : "text-muted-foreground hover:bg-muted/50"
+                    ? "glass-active text-primary font-bold"
+                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
                 )}
               >
+                {currentSessionId === s.session_id && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-r-full shadow-[0_0_10px_rgba(var(--primary),0.5)]" />
+                )}
                 <MessageSquare className={cn(
-                  "w-4 h-4 shrink-0",
-                  currentSessionId === s.session_id ? "text-primary" : "text-muted-foreground/50 group-hover:text-muted-foreground"
+                  "w-4 h-4 shrink-0 transition-transform duration-300 group-hover/item:scale-110",
+                  currentSessionId === s.session_id ? "text-primary" : "text-muted-foreground/40 group-hover/item:text-primary/60"
                 )} />
-                <span className="truncate">{s.title || "New Conversation"}</span>
+                <span className="truncate tracking-tight">{s.title || "New Conversation"}</span>
               </button>
 
               <button

@@ -7,21 +7,28 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 @router.post("/", response_model=SessionResponse)
 async def create_session(request: SessionCreate):
+    # If a specific session ID is provided, use it
+    if request.session_id and not request.force_new:
+        from src.core.state.thread_manager import save_current_session
+        save_current_session(request.session_id, request.tenant_id)
+        return SessionResponse(
+            session_id=request.session_id,
+            tenant_id=request.tenant_id,
+            created_at="now",
+            is_new=False
+        )
+
     # If force_new is requested, clear the current session pointer
     if request.force_new:
         clear_current_session()
         
     # In the current implementation, get_or_create_session uses a global variable for thread_id
-    # We might need to refactor this to be more stateless or accept thread_id
-    # For now, we will use the existing logic but return the ID
     thread_id, is_new = get_or_create_session(request.tenant_id)
     
-    # We should probably allow passing a specific thread_id if we want true multi-session support
-    # But sticking to current logic:
     return SessionResponse(
         session_id=thread_id,
         tenant_id=request.tenant_id,
-        created_at="now", # Placeholder
+        created_at="now",
         is_new=is_new
     )
 

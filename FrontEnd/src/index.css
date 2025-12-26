@@ -129,7 +129,7 @@
   }
 
   .message-bubble {
-    @apply rounded-2xl px-4 py-3 max-w-[90%];
+    @apply rounded-2xl px-4 py-3 max-w-[95%] sm:max-w-[90%] md:max-w-[85%];
   }
 
   .message-user {
@@ -163,6 +163,14 @@
 
   .glass-topbar {
     @apply bg-background/40 backdrop-blur-xl border-b border-white/5 sticky top-0 z-50;
+  }
+
+  .glass-active {
+    @apply bg-primary/15 border border-primary/25 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)];
+  }
+
+  .glass-modern-btn {
+    @apply bg-gradient-to-br from-primary/20 to-accent/20 border border-white/10 shadow-lg hover:from-primary/30 hover:to-accent/30 transition-all duration-300;
   }
 
   .glow-border {

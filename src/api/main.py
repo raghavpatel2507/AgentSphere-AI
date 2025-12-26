@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.api.routers import chat, sessions, tools
+from src.api.routers import chat, sessions, tools, metadata
 from src.core.state import init_checkpointer
 from src.core.mcp.manager import MCPManager
 import logging
@@ -28,6 +28,7 @@ app.add_middleware(
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(tools.router, prefix="/api/v1")
+app.include_router(metadata.router, prefix="/api/v1")
 
 @app.on_event("startup")
 async def startup_event():

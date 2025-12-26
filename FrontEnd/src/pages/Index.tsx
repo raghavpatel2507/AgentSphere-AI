@@ -6,6 +6,8 @@ import { useTools } from '@/hooks/useTools';
 import { useChat } from '@/hooks/useChat';
 import { Toaster } from 'sonner';
 import { ThemeSettings } from '@/components/ThemeSettings';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 import { CommandPalette } from '@/components/CommandPalette';
 import { useState } from 'react';
@@ -18,6 +20,9 @@ import {
 
 const Index = () => {
   const [showTheme, setShowTheme] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isMobile = useIsMobile();
+
   const {
     session,
     sessions,
@@ -52,6 +57,49 @@ const Index = () => {
     onMessageSent: fetchSessions,
   });
 
+  const sidebarProps = {
+    sessions,
+    currentSessionId: session?.session_id || null,
+    onNewSession: () => {
+      clearSession();
+      setMobileMenuOpen(false);
+    },
+    onSwitchSession: (id: string) => {
+      switchSession(id);
+      setMobileMenuOpen(false);
+    },
+    onDeleteSession: deleteSessionById,
+  };
+
+  const mainContent = (
+    <main className="flex-1 flex flex-col h-full overflow-hidden w-full">
+      <TopBar
+        sessionId={session?.session_id || null}
+        connected={!!session}
+        loading={sessionLoading}
+        tools={tools}
+        toolsLoading={toolsLoading}
+        onClearSession={clearSession}
+        onReconnect={reconnect}
+        onOpenTheme={() => setShowTheme(true)}
+        onOpenMenu={() => setMobileMenuOpen(true)}
+      />
+
+      <ChatArea
+        messages={messages}
+        loading={sessionLoading}
+        isStreaming={isStreaming}
+        isPlanning={isPlanning}
+        isRunning={isRunning}
+        planContent={planContent}
+        agentStatus={agentStatus}
+        statusMessage={statusMessage}
+        onSendMessage={sendMessage}
+        onReact={toggleReaction}
+      />
+    </main>
+  );
+
   return (
     <>
       <Toaster
@@ -70,49 +118,29 @@ const Index = () => {
         onOpenSettings={() => setShowTheme(true)}
       />
       <div className="flex h-screen w-full bg-background relative z-10">
-        <ResizablePanelGroup direction="horizontal">
-          <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
-            <Sidebar
-              sessions={sessions}
-              currentSessionId={session?.session_id || null}
-              onNewSession={clearSession}
-              onSwitchSession={switchSession}
-              onDeleteSession={deleteSessionById}
-            />
-          </ResizablePanel>
-          <ResizableHandle withHandle className="bg-white/5 hover:bg-primary/20 transition-colors" />
-          <ResizablePanel defaultSize={80}>
-            <main className="flex-1 flex flex-col h-full overflow-hidden">
-              <TopBar
-                sessionId={session?.session_id || null}
-                connected={!!session}
-                loading={sessionLoading}
-                tools={tools}
-                toolsLoading={toolsLoading}
-                onClearSession={clearSession}
-                onReconnect={reconnect}
-                onOpenTheme={() => setShowTheme(true)}
-              />
-
-              <ChatArea
-                messages={messages}
-                loading={sessionLoading}
-                isStreaming={isStreaming}
-                isPlanning={isPlanning}
-                isRunning={isRunning}
-                planContent={planContent}
-                agentStatus={agentStatus}
-                statusMessage={statusMessage}
-                onSendMessage={sendMessage}
-                onReact={toggleReaction}
-              />
-            </main>
-          </ResizablePanel>
-        </ResizablePanelGroup>
+        {isMobile ? (
+          <>
+            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+              <SheetContent side="left" className="p-0 border-none w-80">
+                <Sidebar {...sidebarProps} />
+              </SheetContent>
+            </Sheet>
+            {mainContent}
+          </>
+        ) : (
+          <ResizablePanelGroup direction="horizontal">
+            <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
+              <Sidebar {...sidebarProps} />
+            </ResizablePanel>
+            <ResizableHandle withHandle className="bg-white/5 hover:bg-primary/20 transition-colors" />
+            <ResizablePanel defaultSize={80}>
+              {mainContent}
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        )}
       </div>
       <ThemeSettings open={showTheme} onOpenChange={setShowTheme} />
     </>
   );
 };
-
 export default Index;

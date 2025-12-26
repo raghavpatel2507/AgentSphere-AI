@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 
 import { CodeBlock } from './CodeBlock';
 import { useTheme } from '@/hooks/useTheme';
+import { LinkPreview } from './LinkPreview';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant';
@@ -95,16 +96,19 @@ export const ChatMessage = memo(function ChatMessage({
             components={{
               a({ node, href, children, ...props }) {
                 return (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1 my-1 rounded-lg bg-primary/10 border border-primary/20 text-primary font-bold hover:bg-primary/20 hover:underline transition-all duration-200 no-underline group/link"
-                    {...props}
-                  >
-                    <span>{children}</span>
-                    <LinkIcon className="w-3 h-3 opacity-60 group-hover/link:opacity-100 transition-opacity" />
-                  </a>
+                  <>
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 my-1 rounded-lg bg-primary/10 border border-primary/20 text-primary font-bold hover:bg-primary/20 hover:underline transition-all duration-200 no-underline group/link max-w-full break-all flex-wrap"
+                      {...props}
+                    >
+                      <span className="break-all">{children}</span>
+                      <LinkIcon className="w-3 h-3 opacity-60 group-hover/link:opacity-100 transition-opacity flex-shrink-0" />
+                    </a>
+                    {!isStreaming && href && <LinkPreview url={href} />}
+                  </>
                 );
               },
               code({ node, className, children, ...props }) {
@@ -129,22 +133,24 @@ export const ChatMessage = memo(function ChatMessage({
         </div>
 
         {/* Display Reactions */}
-        {reactions.length > 0 && (
-          <div className={cn(
-            "flex gap-1.5 mt-2 flex-wrap",
-            isUser ? "justify-end" : "justify-start"
-          )}>
-            {reactions.map(emoji => (
-              <div
-                key={emoji}
-                className="bg-card/90 backdrop-blur-md border border-white/10 px-2 py-1 rounded-full text-sm shadow-sm animate-scale-in flex items-center justify-center min-w-[28px]"
-              >
-                {emoji}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </motion.div>
+        {
+          reactions.length > 0 && (
+            <div className={cn(
+              "flex gap-1.5 mt-2 flex-wrap",
+              isUser ? "justify-end" : "justify-start"
+            )}>
+              {reactions.map(emoji => (
+                <div
+                  key={emoji}
+                  className="bg-card/90 backdrop-blur-md border border-white/10 px-2 py-1 rounded-full text-sm shadow-sm animate-scale-in flex items-center justify-center min-w-[28px]"
+                >
+                  {emoji}
+                </div>
+              ))}
+            </div>
+          )
+        }
+      </div >
+    </motion.div >
   );
 });
