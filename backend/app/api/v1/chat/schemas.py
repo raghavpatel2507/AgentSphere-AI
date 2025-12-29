@@ -33,9 +33,10 @@ class NewChatRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     """Request body for sending a message."""
     content: str = Field(..., min_length=1, max_length=32000)
+    is_resume: bool = Field(False, description="True if resuming after HITL approval")
     
     # HITL approval continuation (optional)
-    hitl_request_id: Optional[UUID] = None
+    hitl_request_id: Optional[str] = None
     hitl_decision: Optional[str] = Field(None, pattern="^(approved|rejected)$")
 
 
