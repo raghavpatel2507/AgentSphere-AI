@@ -1,12 +1,18 @@
 """
 Application configuration using Pydantic Settings.
-Loads configuration from environment variables with sensible defaults.
+Loads configuration from project root .env file.
 """
 
 import os
+from pathlib import Path
 from typing import Optional, List
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
+
+# Find project root (where .env is located)
+# Go up from backend/app/config.py -> backend/app -> backend -> project_root
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+ENV_FILE = PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
@@ -17,37 +23,53 @@ class Settings(BaseSettings):
     APP_VERSION: str = "2.0.0"
     DEBUG: bool = False
     
-    # Database
+    # Database (from existing .env)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:root@localhost:5432/agentsphere"
     POSTGRES_POOL_SIZE: int = 20
     POSTGRES_MAX_OVERFLOW: int = 10
     
     # JWT Configuration
-    JWT_SECRET_KEY: str = "your-super-secret-key-change-in-production"
+    JWT_SECRET_KEY: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 1 day (24 hours)
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
-    # Encryption
-    ENCRYPTION_KEY: str = ""
+    # Encryption (from existing .env)
+    ENCRYPTION_KEY: Optional[str] = None
     
-    # LLM Configuration
+    # LLM Configuration (from existing .env)
     LLM_PROVIDER: str = "openai"
+    MODEL_NAME: str = "gpt-4o"  # Match .env.example
     OPENAI_API_KEY: Optional[str] = None
-    LLM_MODEL: str = "gpt-4o"
-    LLM_TEMPERATURE: float = 0.7
-    LLM_MAX_TOKENS: int = 4096
+    GOOGLE_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
+    GROQ_API_KEY: Optional[str] = None
     
     # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://localhost:8080"  # Parse as string, split later
     
     # HITL
     HITL_REQUEST_TIMEOUT_SECONDS: int = 300  # 5 minutes default
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
+    # OAuth (optional)
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    ZOHO_CLIENT_ID: Optional[str] = None
+    ZOHO_CLIENT_SECRET: Optional[str] = None
+    
+    model_config = SettingsConfigDict(
+        env_file=str(ENV_FILE),
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=True,
+    )
+    
+    @property
+    def cors_origins_list(self) -> List[str]:
+        """Parse CORS_ORIGINS string into list."""
+        if isinstance(self.CORS_ORIGINS, str):
+            return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        return self.CORS_ORIGINS
 
 
 @lru_cache()
@@ -58,3 +80,4 @@ def get_settings() -> Settings:
 
 # Export for convenience
 settings = get_settings()
+

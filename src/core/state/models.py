@@ -12,6 +12,14 @@ from src.core.config.database import Base
 from datetime import datetime, timezone
 import uuid
 
+# Import HITLRequest from backend to avoid duplication
+# This allows MCPManager to query for approvals
+try:
+    from backend.app.models.hitl_request import HITLRequest
+except ImportError:
+    # Fallback if backend models aren't accessible
+    HITLRequest = None
+
 
 class Conversation(Base):
     """

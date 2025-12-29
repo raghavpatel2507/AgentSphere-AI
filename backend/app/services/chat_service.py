@@ -4,7 +4,7 @@ Handles message processing, agent execution, and HITL integration.
 """
 
 import logging
-from typing import AsyncGenerator, Dict, Any, List
+from typing import AsyncGenerator, Dict, Any, List, Optional
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +36,7 @@ class ChatService:
         self,
         conversation: Conversation,
         user_input: str,
+        hitl_request_id: Optional[str] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Process a user message and yield streaming events.
@@ -105,7 +106,11 @@ class ChatService:
             from src.core.mcp.manager import MCPManager
             from src.core.agents.agent import Agent
             
-            mcp_manager = MCPManager(self.user_id)
+            mcp_manager = MCPManager(
+                self.user_id, 
+                conversation_id=conversation.id,
+                hitl_request_id=hitl_request_id
+            )
             await mcp_manager.initialize()
             
             # Connect to required servers
@@ -116,12 +121,12 @@ class ChatService:
             tools = await mcp_manager.get_tools_for_servers(servers_to_use)
             
             if not tools:
-                yield {"type": "error", "message": "No tools available from selected servers"}
+                yield {"type": "error", "content": "No tools available from selected servers"}
                 return
             
             # Create agent
             llm = LLMFactory.load_config_and_create_llm()
-            agent = Agent(llm, mcp_manager.client, tools)
+            agent = Agent(llm, mcp_manager._mcp_client, tools)
             
             # Execute agent with streaming
             yield {"type": "status", "content": "Executing task..."}
@@ -144,10 +149,17 @@ class ChatService:
                         }
                     
                     elif event_type == "tool_end":
+                        # Serialize tool output - it may be a LangChain message object
+                        output = event.get("output")
+                        if hasattr(output, 'content'):
+                            output = output.content
+                        elif not isinstance(output, (str, int, float, bool, type(None))):
+                            output = str(output)
+                        
                         yield {
                             "type": "tool_end",
                             "tool": event.get("tool"),
-                            "output": event.get("output"),
+                            "output": output,
                         }
                     
                     elif event_type == "approval_required":
@@ -180,8 +192,9 @@ class ChatService:
                 await mcp_manager.cleanup()
                 
         except Exception as e:
-            logger.error(f"Chat processing error: {e}")
-            yield {"type": "error", "message": str(e)}
+            import traceback
+            logger.error(f"Chat processing error: {e}\n{traceback.format_exc()}")
+            yield {"type": "error", "content": f"Error: {str(e)}"}
     
     async def _load_history(self, conversation_id: UUID) -> List[Any]:
         """Load conversation history as LangChain messages."""
@@ -294,4 +307,4 @@ class ChatService:
                     
         except Exception as e:
             logger.error(f"Direct response error: {e}")
-            yield {"type": "error", "message": str(e)}
+            yield {"type": "error", "content": f"Error: {str(e)}"}

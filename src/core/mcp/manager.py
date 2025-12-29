@@ -91,8 +91,10 @@ class MCPManager:
     Now supporting Multi-User DB storage.
     """
     
-    def __init__(self, user_id: Any):
+    def __init__(self, user_id: Any, conversation_id: Optional[Any] = None, hitl_request_id: Optional[str] = None):
         self.user_id = user_id
+        self.conversation_id = conversation_id
+        self.hitl_request_id = hitl_request_id  # For request-ID-based approval checking
         
         # Central MCPClient to manage all servers
         self._mcp_client: Optional[MCPClient] = None
@@ -453,7 +455,7 @@ class MCPManager:
         
         async def hitl_wrapper(**kwargs):
             # Manual HITL check (middleware will also catch this)
-            await self._check_hitl_approval(tool_name_for_logic, kwargs)
+            await self._check_hitl_approval(tool_name_for_logic, kwargs, self.hitl_request_id)
             # Call original tool function
             if original_coroutine:
                 return await original_coroutine(**kwargs)
@@ -481,24 +483,60 @@ class MCPManager:
             # Fallback for non-serializable args
             return f"{tool_name}:{str(args)}"
 
-    async def _check_hitl_approval(self, tool_name: str, tool_args: dict):
+    async def _check_hitl_approval(self, tool_name: str, tool_args: dict, request_id: Optional[str] = None):
         """
-        Manual HITL check as a backup to middleware.
+        Check if HITL approval is needed for a tool call.
+        
+        If request_id is provided, check if THAT specific request is approved.
+        If no request_id, this is a new request - always require approval if tool is sensitive.
+        
         Raises ApprovalRequiredError if approval is needed.
         """
         sig = self._compute_signature(tool_name, tool_args)
         
-        # If tool signature is whitelisted (recently approved same call), allow it ONCE then remove
+        # If tool signature is whitelisted (session-based bypass), allow it ONCE then remove
         if sig in self.whitelisted_tools:
-            # One-time approval policy
             self.whitelisted_tools.remove(sig)
             return
 
         # If it doesn't need approval according to config, return
         if not self._needs_hitl_wrapper(tool_name):
             return
+        
+        # If a specific request_id is provided, check if IT is approved
+        if request_id and str(request_id).strip() and self.conversation_id:
+            try:
+                from sqlalchemy import select
+                from sqlalchemy.ext.asyncio import AsyncSession
+                from src.core.config.database import async_engine
+                from backend.app.models.hitl_request import HITLRequest
+                from uuid import UUID
+                
+                # Validate UUID format
+                try:
+                    uuid_obj = UUID(str(request_id))
+                except ValueError:
+                    logger.warning(f"Invalid UUID for hitl_request_id: {request_id}")
+                    return # Treat as new request
+                
+                async with AsyncSession(async_engine) as session:
+                    result = await session.execute(
+                        select(HITLRequest).where(
+                            HITLRequest.id == uuid_obj,
+                            HITLRequest.status == 'APPROVED'
+                        )
+                    )
+                    approval = result.scalar_one_or_none()
+                    
+                    if approval:
+                        logger.info(f"✅ Found approval for request {request_id} ({tool_name})")
+                        return  # Bypass HITL check
+                    else:
+                        logger.warning(f"⚠️ Request {request_id} not found or not approved")
+            except Exception as e:
+                logger.warning(f"Failed to check request approval: {e}")
             
-        # If we reached here, the tool needs approval and is NOT whitelisted
+        # If we reached here, the tool needs approval
         raise ApprovalRequiredError(
             tool_name=tool_name,
             tool_args=tool_args,

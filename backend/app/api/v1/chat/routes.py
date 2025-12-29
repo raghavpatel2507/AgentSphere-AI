@@ -103,14 +103,15 @@ async def send_message(
             detail="Conversation not found"
         )
     
-    # Save user message
-    user_message = Message(
-        conversation_id=conversation.id,
-        role='USER',
-        content=request.content,
-    )
-    db.add(user_message)
-    await db.commit()
+    # Save user message (skip if resuming to avoid duplicates)
+    if not request.is_resume:
+        user_message = Message(
+            conversation_id=conversation.id,
+            role='USER',
+            content=request.content,
+        )
+        db.add(user_message)
+        await db.commit()
     
     # Update conversation title if first message
     if conversation.title == "New Conversation":
@@ -129,6 +130,7 @@ async def send_message(
             async for event in chat_service.process_message(
                 conversation=conversation,
                 user_input=request.content,
+                hitl_request_id=request.hitl_request_id,
             ):
                 # Format as SSE
                 yield f"data: {json.dumps(event)}\n\n"
@@ -137,7 +139,7 @@ async def send_message(
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
             
         except Exception as e:
-            error_event = {"type": "error", "message": str(e)}
+            error_event = {"type": "error", "content": str(e)}
             yield f"data: {json.dumps(error_event)}\n\n"
     
     return StreamingResponse(

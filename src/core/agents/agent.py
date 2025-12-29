@@ -83,7 +83,8 @@ class Agent:
                     pass
 
         except GraphRecursionError:
-            yield {"type": "error", "message": "⚠️ Task too complex or loop detected."}
+            logger.error("GraphRecursionError encountered")
+            yield {"type": "error", "content": "⚠️ Task too complex or loop detected."}
         except Exception as e:
             from src.core.mcp.manager import ApprovalRequiredError
             # Check for ApprovalRequiredError in the cause or the message
@@ -95,13 +96,15 @@ class Agent:
             if isinstance(err, ApprovalRequiredError):
                 yield {
                     "type": "approval_required",
+                    "request_id": str(err.request_id) if hasattr(err, 'request_id') else None,
                     "tool_name": err.tool_name,
                     "tool_args": err.tool_args,
                     "message": err.message
                 }
             else:
-                logger.error(f"Streaming error: {e}")
-                yield {"type": "error", "message": str(e)}
+                import traceback
+                logger.error(f"Streaming error: {e}\n{traceback.format_exc()}")
+                yield {"type": "error", "content": f"Error: {str(e)}"}
 
     async def execute(self, user_input: str, history: List[BaseMessage]) -> List[BaseMessage]:
         """Legacy execution for compatibility."""

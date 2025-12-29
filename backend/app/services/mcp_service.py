@@ -1,106 +1,91 @@
 """
 MCP Service for managing MCP server connections and tools.
-Wraps the existing MCPManager for API use.
+Uses mcp-use + langchain-mcp-adapters like the existing codebase.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
 
 class MCPService:
-    """
-    Service layer for MCP operations.
-    Wraps the existing MCPManager for stateless API use.
-    """
+    """Fast, stateless MCP tool listing service."""
     
     def __init__(self, user_id: UUID):
         self.user_id = user_id
-        self._manager = None
-    
-    async def _get_manager(self):
-        """Lazy load the MCPManager."""
-        if self._manager is None:
-            try:
-                from src.core.mcp.manager import MCPManager
-                self._manager = MCPManager(self.user_id)
-                await self._manager.initialize()
-            except Exception as e:
-                logger.error(f"Failed to initialize MCPManager: {e}")
-                raise
-        return self._manager
     
     async def test_server_connection(self, server_name: str, config: Dict[str, Any]) -> int:
-        """
-        Test connection to an MCP server.
-        
-        Returns the number of tools available.
-        """
-        try:
-            from mcp_use.client import MCPClient
-            
-            # Create a temporary client for testing
-            temp_config = {"mcpServers": {server_name: config}}
-            client = MCPClient(temp_config)
-            
-            # Try to connect
-            await client.create_session(server_name)
-            
-            # Get session and list tools
-            session = client.get_session(server_name)
-            if session:
-                tools_result = await session.list_tools()
-                tools_count = len(tools_result.tools) if tools_result else 0
-                
-                # Cleanup
-                await client.close_session(server_name)
-                
-                return tools_count
-            
-            return 0
-        except Exception as e:
-            logger.error(f"Connection test failed for {server_name}: {e}")
-            raise
+        """Test connection and return tool count."""
+        tools = await self.get_tools_for_server(server_name, config)
+        return len(tools)
     
     async def get_tools_for_server(self, server_name: str, config: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Get available tools for a specific server.
+        """Get tools using session + langchain-mcp-adapters pattern."""
+        from mcp_use import MCPClient
+        from langchain_mcp_adapters.tools import load_mcp_tools
         
-        Returns list of tool definitions.
-        """
+        client = None
         try:
-            from mcp_use.client import MCPClient
+            # Create client with server config
+            full_config = {"mcpServers": {server_name: config}}
+            client = MCPClient(full_config)
             
-            temp_config = {"mcpServers": {server_name: config}}
-            client = MCPClient(temp_config)
-            
+            # Create session
             await client.create_session(server_name)
             session = client.get_session(server_name)
             
-            if session:
-                tools_result = await session.list_tools()
-                tools = []
-                
-                if tools_result and tools_result.tools:
-                    for tool in tools_result.tools:
-                        tools.append({
-                            "name": tool.name,
-                            "description": getattr(tool, 'description', None),
-                            "inputSchema": getattr(tool, 'inputSchema', None),
-                        })
-                
-                await client.close_session(server_name)
-                return tools
+            if not session:
+                return []
             
-            return []
+            # Create adapter (same pattern as MCPManager)
+            class ListToolsResult:
+                def __init__(self, tools):
+                    self.tools = tools
+                    self.nextCursor = None
+            
+            class SessionAdapter:
+                def __init__(self, sess):
+                    self.sess = sess
+                async def list_tools(self, cursor: str = None):
+                    tools = await self.sess.list_tools()
+                    return ListToolsResult(tools)
+                async def call_tool(self, name: str, arguments: dict, **kwargs):
+                    return await self.sess.call_tool(name=name, arguments=arguments)
+            
+            adapter = SessionAdapter(session)
+            mcp_tools = await load_mcp_tools(adapter)
+            
+            tools = []
+            for tool in mcp_tools:
+                # Handle args_schema - could be a Pydantic model or already a dict
+                schema = None
+                if hasattr(tool, 'args_schema') and tool.args_schema:
+                    if hasattr(tool.args_schema, 'schema'):
+                        schema = tool.args_schema.schema()
+                    elif isinstance(tool.args_schema, dict):
+                        schema = tool.args_schema
+                
+                tools.append({
+                    "name": getattr(tool, 'name', 'unknown'),
+                    "description": getattr(tool, 'description', None),
+                    "inputSchema": schema,
+                })
+            
+            return tools
+            
         except Exception as e:
             logger.error(f"Failed to get tools for {server_name}: {e}")
-            raise
+            return []  # Return empty instead of raising to avoid breaking list_all
+        finally:
+            if client:
+                try:
+                    await client.close_session(server_name)
+                except:
+                    pass
     
     async def cleanup(self):
-        """Cleanup manager resources."""
-        if self._manager:
-            await self._manager.cleanup()
-            self._manager = None
+        pass
+
+

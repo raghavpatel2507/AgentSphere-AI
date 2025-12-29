@@ -116,6 +116,15 @@ class LLMFactory:
     def load_config_and_create_llm(config_path: str = "multi_server_config.json") -> BaseChatModel:
         """Loads config from file or env and creates LLM."""
         import json
+        from pathlib import Path
+        from dotenv import load_dotenv
+        
+        # Find and load .env from project root
+        # This file is at src/core/llm/provider.py -> go up 3 levels to project root
+        project_root = Path(__file__).resolve().parent.parent.parent.parent
+        env_file = project_root / ".env"
+        if env_file.exists():
+            load_dotenv(env_file, override=True)
         
         # Default configuration from environment variables
         # Default configuration from environment variables
@@ -126,16 +135,17 @@ class LLMFactory:
             max_tokens = 4096
 
         config = {
-            "provider": os.getenv("LLM_PROVIDER", "openrouter"),
-            "model": os.getenv("MODEL_NAME", "mistralai/mistral-large-2411"),
-            "temperature": float(os.getenv("LLM_TEMPERATURE", "0.1")),
-            "max_tokens": max_tokens
+            "provider": os.getenv("LLM_PROVIDER", "openai"),  # Changed from openrouter to openai
+            "model": os.getenv("MODEL_NAME", "gpt-4o"),
+            "temperature": float(os.getenv("LLM_TEMPERATURE", "0.7")),
+            "max_tokens": int(os.getenv("MAX_TOKENS", "100000")) if os.getenv("MAX_TOKENS") else None
         }
         
         # Try loading from multi_server_config.json if it exists (for overrides if any)
-        if os.path.exists(config_path):
+        config_file = project_root / config_path
+        if config_file.exists():
             try:
-                with open(config_path, 'r') as f:
+                with open(config_file, 'r') as f:
                     full_config = json.load(f)
                     # extending support if user still wants to put llm config in multi_server_config.json
                     llm_settings = full_config.get("llm", {})
@@ -146,3 +156,4 @@ class LLMFactory:
                 logger.warning(f"Error loading LLM config from {config_path}: {e}")
             
         return LLMFactory.create_llm(config)
+
