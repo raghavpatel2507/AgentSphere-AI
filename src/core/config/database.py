@@ -11,10 +11,14 @@ from sqlalchemy import create_engine, Column, String, Boolean, DateTime, JSON, U
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.sql import func
+from pathlib import Path
 from dotenv import load_dotenv
 import uuid
 
-load_dotenv()
+# Find project root (where .env is located)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+ENV_FILE = PROJECT_ROOT / ".env"
+load_dotenv(dotenv_path=ENV_FILE)
 
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:root@localhost:5432/agentsphere")
@@ -23,37 +27,6 @@ POSTGRES_MAX_OVERFLOW = int(os.getenv("POSTGRES_MAX_OVERFLOW", "10"))
 
 # SQLAlchemy Base
 Base = declarative_base()
-
-
-# ============================================
-# Database Models
-# ============================================
-
-class Tenant(Base):
-    """Tenant model for multi-tenant support."""
-    __tablename__ = "tenants"
-
-    id = Column(SQLUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(255), nullable=False)
-    api_key = Column(String(255), unique=True, nullable=False, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    is_active = Column(Boolean, default=True, index=True)
-    extra_metadata = Column(JSON, default={}, name="metadata")  # Renamed to avoid SQLAlchemy conflict
-
-
-
-class TenantConfig(Base):
-    """Tenant configuration model for storing per-tenant settings."""
-    __tablename__ = "tenant_configs"
-
-    id = Column(SQLUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(SQLUUID(as_uuid=True), nullable=False, index=True)
-    config_key = Column(String(255), nullable=False)
-    config_value = Column(JSON, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
 
 
 # ============================================

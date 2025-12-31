@@ -9,6 +9,7 @@ from passlib.context import CryptContext
 from cryptography.fernet import Fernet
 from functools import lru_cache
 
+from typing import Any, Dict
 from backend.app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -68,3 +69,22 @@ def decrypt_value(encrypted_value: str) -> str:
     except Exception as e:
         logger.error(f"Decryption failed: {e}")
         return "[DECRYPTION_FAILED]"
+
+
+def decrypt_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Decrypt sensitive env vars in an MCP server configuration.
+    Matches the pattern used in the frontend and routes for identifying sensitive keys.
+    """
+    import copy
+    c = copy.deepcopy(config)
+    if "env" in c and isinstance(c["env"], dict):
+        for k, v in c["env"].items():
+            if any(s in k.upper() for s in ["KEY", "TOKEN", "SECRET", "PASSWORD"]):
+                if isinstance(v, str) and not v.startswith("${"):
+                    decrypted = decrypt_value(v)
+                    if decrypted == "[DECRYPTION_FAILED]":
+                        logger.error(f"Decryption failed for key: {k}")
+                    else:
+                        c["env"][k] = decrypted
+    return c

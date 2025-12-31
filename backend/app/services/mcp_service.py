@@ -4,6 +4,7 @@ Uses mcp-use + langchain-mcp-adapters like the existing codebase.
 """
 
 import logging
+import os
 from typing import Any, Dict, List
 from uuid import UUID
 
@@ -18,9 +19,13 @@ class MCPService:
     
     async def test_server_connection(self, server_name: str, config: Dict[str, Any]) -> int:
         """Test connection and return tool count."""
-        tools = await self.get_tools_for_server(server_name, config)
-        return len(tools)
-    
+        try:
+            tools = await self.get_tools_for_server(server_name, config)
+            return len(tools)
+        except Exception as e:
+            logger.error(f"Test connection failed for {server_name}: {e}")
+            raise
+
     async def get_tools_for_server(self, server_name: str, config: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Get tools using session + langchain-mcp-adapters pattern."""
         from mcp_use import MCPClient
@@ -28,6 +33,11 @@ class MCPService:
         
         client = None
         try:
+            # Windows compatibility for npx
+            if os.name == 'nt' and config.get("command") == "npx":
+                config = config.copy()
+                config["command"] = "npx.cmd"
+
             # Create client with server config
             full_config = {"mcpServers": {server_name: config}}
             client = MCPClient(full_config)
@@ -37,6 +47,7 @@ class MCPService:
             session = client.get_session(server_name)
             
             if not session:
+                logger.error(f"Failed to get session for {server_name}")
                 return []
             
             # Create adapter (same pattern as MCPManager)
@@ -49,8 +60,21 @@ class MCPService:
                 def __init__(self, sess):
                     self.sess = sess
                 async def list_tools(self, cursor: str = None):
-                    tools = await self.sess.list_tools()
-                    return ListToolsResult(tools)
+                    # Robust handling of list_tools result
+                    # Some servers/mcp-use versions return an object with .tools, some return a list
+                    result = await self.sess.list_tools()
+                    
+                    # If it's already a ListToolsResult or has .tools attribute
+                    if hasattr(result, 'tools'):
+                        tools_list = result.tools
+                    elif isinstance(result, list):
+                        tools_list = result
+                    else:
+                        logger.warning(f"Unexpected list_tools result type for {server_name}: {type(result)}")
+                        tools_list = []
+                        
+                    return ListToolsResult(tools_list)
+
                 async def call_tool(self, name: str, arguments: dict, **kwargs):
                     return await self.sess.call_tool(name=name, arguments=arguments)
             
@@ -77,7 +101,7 @@ class MCPService:
             
         except Exception as e:
             logger.error(f"Failed to get tools for {server_name}: {e}")
-            return []  # Return empty instead of raising to avoid breaking list_all
+            raise
         finally:
             if client:
                 try:
@@ -87,5 +111,3 @@ class MCPService:
     
     async def cleanup(self):
         pass
-
-

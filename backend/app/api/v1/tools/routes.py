@@ -14,6 +14,7 @@ from backend.app.models.user import User
 from backend.app.models.mcp_server import MCPServerConfig
 from backend.app.api.v1.tools.schemas import (
     ToggleToolRequest,
+    ToggleHITLRequest,
     ToolInfo,
     ToolListResponse,
     ServerToolsResponse,
@@ -39,51 +40,24 @@ async def list_all_tools(
 ):
     """
     List all available tools across enabled MCP servers.
-    
-    Note: This endpoint requires active connections to MCP servers.
     """
-    # Get enabled servers
-    result = await db.execute(
-        select(MCPServerConfig).where(
-            MCPServerConfig.user_id == current_user.id,
-            MCPServerConfig.enabled == True
-        )
-    )
-    servers = result.scalars().all()
+    from src.core.mcp.pool import mcp_pool
+    manager = await mcp_pool.get_manager(current_user.id)
     
-    if not servers:
-        return ToolListResponse(tools=[], total=0)
-    
+    all_status = await manager.get_all_tools_status()
     all_tools = []
-    hitl_patterns = (current_user.hitl_config or {}).get("sensitive_tools", [])
     
-    try:
-        from backend.app.services.mcp_service import MCPService
-        
-        mcp_service = MCPService(current_user.id)
-        
-        for server in servers:
-            try:
-                tools = await mcp_service.get_tools_for_server(server.name, server.config)
-                disabled_tools = server.disabled_tools or []
-                
-                for tool in tools:
-                    tool_name = tool.get("name", "unknown")
-                    all_tools.append(ToolInfo(
-                        name=tool_name,
-                        description=tool.get("description"),
-                        server_name=server.name,
-                        enabled=tool_name not in disabled_tools,
-                        requires_approval=_tool_matches_hitl_pattern(tool_name, hitl_patterns),
-                        input_schema=tool.get("inputSchema"),
-                    ))
-            except Exception as e:
-                # Log error but continue with other servers
-                pass
-    except ImportError:
-        # MCPService not yet available, return empty
-        pass
-    
+    for server_name, status in all_status.items():
+        for tool in status.get("tools", []):
+            all_tools.append(ToolInfo(
+                name=tool["name"],
+                description=tool.get("description"),
+                server_name=server_name,
+                enabled=tool["enabled"],
+                requires_approval=tool["hitl"],
+                input_schema=None # manager doesn't cache schema yet, but could wrap
+            ))
+            
     return ToolListResponse(tools=all_tools, total=len(all_tools))
 
 
@@ -96,116 +70,66 @@ async def get_server_tools(
     """
     List tools for a specific MCP server.
     """
-    result = await db.execute(
-        select(MCPServerConfig).where(
-            MCPServerConfig.user_id == current_user.id,
-            MCPServerConfig.name == server_name
-        )
-    )
-    server = result.scalar_one_or_none()
+    from src.core.mcp.pool import mcp_pool
+    manager = await mcp_pool.get_manager(current_user.id)
     
-    if not server:
+    all_status = await manager.get_all_tools_status()
+    server_status = all_status.get(server_name)
+    
+    if not server_status:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server '{server_name}' not found"
+            detail=f"Server '{server_name}' not found or disconnected"
         )
     
-    hitl_patterns = (current_user.hitl_config or {}).get("sensitive_tools", [])
-    disabled_tools = server.disabled_tools or []
+    tools = [
+        ToolInfo(
+            name=t["name"],
+            description=t.get("description"),
+            server_name=server_name,
+            enabled=t["enabled"],
+            requires_approval=t["hitl"]
+        )
+        for t in server_status.get("tools", [])
+    ]
     
-    try:
-        from backend.app.services.mcp_service import MCPService
-        
-        mcp_service = MCPService(current_user.id)
-        tools_data = await mcp_service.get_tools_for_server(server.name, server.config)
-        
-        tools = [
-            ToolInfo(
-                name=t.get("name", "unknown"),
-                description=t.get("description"),
-                server_name=server.name,
-                enabled=t.get("name", "") not in disabled_tools,
-                requires_approval=_tool_matches_hitl_pattern(t.get("name", ""), hitl_patterns),
-                input_schema=t.get("inputSchema"),
-            )
-            for t in tools_data
-        ]
-        
-        return ServerToolsResponse(
-            server_name=server_name,
-            connected=True,
-            tools=tools,
-        )
-    except Exception as e:
-        return ServerToolsResponse(
-            server_name=server_name,
-            connected=False,
-            tools=[],
-            error=str(e),
-        )
+    return ServerToolsResponse(
+        server_name=server_name,
+        connected=server_status["connected"],
+        tools=tools,
+    )
 
 
-@router.post("/{server_name}/{tool_name}/enable", response_model=MessageResponse)
-async def enable_tool(
+@router.post("/{server_name}/{tool_name}/toggle", response_model=MessageResponse)
+async def toggle_tool(
     server_name: str,
     tool_name: str,
+    request: ToggleToolRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
 ):
     """
-    Enable a specific tool on a server.
+    Enable or disable a specific tool.
     """
-    result = await db.execute(
-        select(MCPServerConfig).where(
-            MCPServerConfig.user_id == current_user.id,
-            MCPServerConfig.name == server_name
-        )
-    )
-    server = result.scalar_one_or_none()
+    from src.core.mcp.pool import mcp_pool
+    manager = await mcp_pool.get_manager(current_user.id)
     
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server '{server_name}' not found"
-        )
-    
-    disabled_tools = server.disabled_tools or []
-    if tool_name in disabled_tools:
-        disabled_tools.remove(tool_name)
-        server.disabled_tools = disabled_tools
-        await db.commit()
-    
-    return MessageResponse(message=f"Tool '{tool_name}' enabled")
+    # Passing server_name to ensure we update the right server config
+    message = await manager.toggle_tool_status(tool_name, request.enabled, server_name=server_name)
+    return MessageResponse(message=message)
 
 
-@router.post("/{server_name}/{tool_name}/disable", response_model=MessageResponse)
-async def disable_tool(
+@router.post("/{server_name}/{tool_name}/hitl", response_model=MessageResponse)
+async def toggle_tool_hitl(
     server_name: str,
     tool_name: str,
+    request: ToggleHITLRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
 ):
     """
-    Disable a specific tool on a server.
+    Toggle HITL requirement for a tool.
     """
-    result = await db.execute(
-        select(MCPServerConfig).where(
-            MCPServerConfig.user_id == current_user.id,
-            MCPServerConfig.name == server_name
-        )
-    )
-    server = result.scalar_one_or_none()
+    from src.core.mcp.pool import mcp_pool
+    manager = await mcp_pool.get_manager(current_user.id)
     
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Server '{server_name}' not found"
-        )
-    
-    disabled_tools = server.disabled_tools or []
-    if tool_name not in disabled_tools:
-        disabled_tools.append(tool_name)
-        server.disabled_tools = disabled_tools
-        await db.commit()
-    
-    return MessageResponse(message=f"Tool '{tool_name}' disabled")
+    message = await manager.toggle_tool_hitl(tool_name, request.hitl_enabled)
+    return MessageResponse(message=message)

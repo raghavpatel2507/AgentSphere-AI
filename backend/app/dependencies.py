@@ -10,26 +10,13 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from backend.app.db import AsyncSessionLocal
+from backend.app.db import AsyncSessionLocal, get_db
 from backend.app.core.auth import decode_token
 from backend.app.models.user import User
 
 
 # Security scheme for JWT Bearer tokens
 security = HTTPBearer(auto_error=False)
-
-
-async def get_db() -> AsyncSession:
-    """
-    Dependency that provides a database session.
-    Automatically handles commit/rollback and close.
-    """
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        except Exception:
-            await session.rollback()
-            raise
 
 
 async def get_current_user_optional(

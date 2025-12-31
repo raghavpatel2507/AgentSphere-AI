@@ -35,6 +35,10 @@ class ToolInfo(BaseModel):
     requires_approval: bool = False
     input_schema: Optional[Dict[str, Any]] = None
 
+class ToggleHITLRequest(BaseModel):
+    """Request body for toggling HITL on a tool."""
+    hitl_enabled: bool
+
 
 class ToolListResponse(BaseModel):
     """Response for listing tools."""

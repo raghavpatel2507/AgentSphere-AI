@@ -10,10 +10,10 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from backend.app.models.conversation import Conversation
-from backend.app.models.message import Message
+from backend.app.models.conversation import Conversation, ConversationStatus
+from backend.app.models.message import Message, MessageRole
 from backend.app.models.mcp_server import MCPServerConfig
-from backend.app.models.hitl_request import HITLRequest
+from backend.app.models.hitl_request import HITLRequest, HITLStatus
 from backend.app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ class ChatService:
                     plan_result = chunk
             
             if not plan_result:
-                # Planner returned direct response
+                # Planner returned direct response (likely failed to format as JSON but streamed)
                 if direct_tokens:
                     final_response = "".join(direct_tokens)
                     await self._save_assistant_message(conversation.id, final_response)
@@ -96,22 +96,24 @@ class ChatService:
                 # Direct response from planner
                 response_text = plan_result.get("response", "")
                 if response_text:
-                    yield {"type": "token", "content": response_text}
+                    # If we already streamed tokens during planning, don't yield them again
+                    if not direct_tokens:
+                        yield {"type": "token", "content": response_text}
                     await self._save_assistant_message(conversation.id, response_text)
                 return
             
             # Initialize MCP and Agent
             yield {"type": "status", "content": f"Connecting to agents: {', '.join(servers_to_use)}..."}
             
-            from src.core.mcp.manager import MCPManager
+            from src.core.mcp.pool import mcp_pool
             from src.core.agents.agent import Agent
             
-            mcp_manager = MCPManager(
+            mcp_manager = await mcp_pool.get_manager(
                 self.user_id, 
                 conversation_id=conversation.id,
                 hitl_request_id=hitl_request_id
             )
-            await mcp_manager.initialize()
+            # initialization handled by pool
             
             # Connect to required servers
             await mcp_manager.connect_to_servers(servers_to_use)
@@ -188,12 +190,11 @@ class ChatService:
                     await self._save_assistant_message(conversation.id, final_response)
                     
             finally:
-                # Cleanup MCP connections
-                await mcp_manager.cleanup()
+                # Do NOT cleanup MCP connections - they are managed by the pool
+                pass
                 
         except Exception as e:
-            import traceback
-            logger.error(f"Chat processing error: {e}\n{traceback.format_exc()}")
+            logger.error(f"Chat processing error: {e}")
             yield {"type": "error", "content": f"Error: {str(e)}"}
     
     async def _load_history(self, conversation_id: UUID) -> List[Any]:
@@ -210,11 +211,11 @@ class ChatService:
         
         history = []
         for msg in messages:
-            if msg.role == 'USER':
+            if msg.role == MessageRole.USER:
                 history.append(HumanMessage(content=msg.content))
-            elif msg.role == 'ASSISTANT':
+            elif msg.role == MessageRole.ASSISTANT:
                 history.append(AIMessage(content=msg.content))
-            elif msg.role == 'SYSTEM':
+            elif msg.role == MessageRole.SYSTEM:
                 history.append(SystemMessage(content=msg.content))
         
         return history
@@ -242,7 +243,7 @@ class ChatService:
         """Save assistant message to database."""
         message = Message(
             conversation_id=conversation_id,
-            role='ASSISTANT',
+            role=MessageRole.ASSISTANT,
             content=content,
         )
         self.db.add(message)
@@ -266,14 +267,14 @@ class ChatService:
             tool_name=tool_name,
             tool_args=tool_args,
             server_name=server_name,
-            status='PENDING',
+            status=HITLStatus.PENDING,
             expires_at=expires_at,
         )
         
         self.db.add(hitl_request)
         
         # Update conversation status
-        conversation.status = 'PENDING_APPROVAL'
+        conversation.status = ConversationStatus.PENDING_APPROVAL
         await self.db.commit()
         await self.db.refresh(hitl_request)
         

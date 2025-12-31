@@ -29,7 +29,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config.database import async_engine
 from src.core.state.models import User, MCPServerConfig
-from src.core.auth.security import encrypt_value, decrypt_value
+from src.core.auth.security import encrypt_value, decrypt_value, decrypt_config
 from src.core.mcp.registry import SPHERE_REGISTRY, get_app_by_id
 
 logger = logging.getLogger(__name__)
@@ -117,6 +117,11 @@ class MCPManager:
         # Tool Definition Cache (server_name -> list[tool])
         self.tool_cache: Dict[str, List[Any]] = {}
 
+    @property
+    def hitl_config(self) -> Dict[str, Any]:
+        """Get current HITL configuration."""
+        return self.config_data.get("hitl_config", {})
+
     def whitelist_tool(self, tool_name: str, tool_args: dict):
         """Add a tool + args signature to the session whitelist to bypass HITL."""
         sig = self._compute_signature(tool_name, tool_args)
@@ -143,10 +148,11 @@ class MCPManager:
             for row in configs:
                 config = row.config
                 if row.is_encrypted:
-                    config = self._decrypt_config(config)
+                    config = decrypt_config(config)
                 
-                # Ensure 'enabled' flag is preserved in runtime config
+                # Ensure 'enabled' flag and disabled tools are preserved in runtime config
                 config["enabled"] = row.enabled
+                config["disabled_tools"] = row.disabled_tools or []
                 mcp_servers[row.name] = config
                 
             self.config_data["mcpServers"] = mcp_servers
@@ -157,7 +163,7 @@ class MCPManager:
         async with AsyncSession(async_engine) as session:
             stmt = select(User).where(User.id == self.user_id)
             result = await session.execute(stmt)
-            user = result.scalar_one_or_none()
+            user = user_result.scalar_one_or_none() if 'user_result' in locals() else result.scalar_one_or_none()
             
             if user:
                 # Merge or replace? For now, replace.
@@ -181,6 +187,7 @@ class MCPManager:
             row = result.scalar_one_or_none()
             
             enabled = config.pop("enabled", True)
+            disabled_tools = config.pop("disabled_tools", [])
             
             # Encrypt sensitive parts before saving
             encrypted_config = self._encrypt_config(config)
@@ -188,6 +195,7 @@ class MCPManager:
             if row:
                 row.config = encrypted_config
                 row.enabled = enabled
+                row.disabled_tools = disabled_tools
                 row.is_encrypted = True
             else:
                 row = MCPServerConfig(
@@ -195,6 +203,7 @@ class MCPManager:
                     name=server_name,
                     config=encrypted_config,
                     enabled=enabled,
+                    disabled_tools=disabled_tools,
                     is_encrypted=True
                 )
                 session.add(row)
@@ -209,19 +218,13 @@ class MCPManager:
         c = copy.deepcopy(config)
         if "env" in c:
             for k, v in c["env"].items():
-                if "TOKEN" in k.upper() or "KEY" in k.upper() or "SECRET" in k.upper():
+                if any(s in k.upper() for s in ["KEY", "TOKEN", "SECRET", "PASSWORD"]):
                     c["env"][k] = encrypt_value(v)
         return c
 
     def _decrypt_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Decrypt sensitive env vars in config."""
-        import copy
-        c = copy.deepcopy(config)
-        if "env" in c:
-            for k, v in c["env"].items():
-                if "TOKEN" in k.upper() or "KEY" in k.upper() or "SECRET" in k.upper():
-                    c["env"][k] = decrypt_value(v)
-        return c
+        """Decrypt sensitive env vars in config (delegates to centralized logic)."""
+        return decrypt_config(config)
             
     async def initialize(self):
         """
@@ -407,6 +410,9 @@ class MCPManager:
         original_coroutine = tool.coroutine
         
         async def string_wrapper(**kwargs):
+            # TRANSFORMATION: Fix specific tool parameter issues
+            kwargs = self._fix_tool_parameters(tool.name, kwargs)
+            
             result = await original_coroutine(**kwargs)
             # If result is not a string, convert it
             if not isinstance(result, str):
@@ -414,8 +420,6 @@ class MCPManager:
                 if hasattr(result, 'content') and isinstance(result.content, str):
                     return result.content
                 return str(result)
-            return result
-            
         return StructuredTool.from_function(
             name=new_name or tool.name,
             description=tool.description,
@@ -424,6 +428,21 @@ class MCPManager:
             args_schema=tool.args_schema,
             handle_tool_error=True
         )
+
+    def _fix_tool_parameters(self, tool_name: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """Fixes common parameter mismatches for specific tools."""
+        # 1. Firecrawl Search: Fix 'sources' being a list of strings instead of list of objects
+        if "firecrawl_search" in tool_name:
+            if "sources" in kwargs and isinstance(kwargs["sources"], list):
+                new_sources = []
+                for s in kwargs["sources"]:
+                    if isinstance(s, str):
+                        new_sources.append({"type": s})
+                    else:
+                        new_sources.append(s)
+                kwargs["sources"] = new_sources
+                
+        return kwargs
 
     def _needs_hitl_wrapper(self, tool_name: str) -> bool:
         """Check if tool needs HITL approval wrapper."""
@@ -515,26 +534,29 @@ class MCPManager:
                 # Validate UUID format
                 try:
                     uuid_obj = UUID(str(request_id))
+                    
+                    async with AsyncSession(async_engine) as session:
+                        result = await session.execute(
+                            select(HITLRequest).where(
+                                HITLRequest.id == uuid_obj,
+                                HITLRequest.status == 'APPROVED'
+                            )
+                        )
+                        approval = result.scalar_one_or_none()
+                        
+                        if approval:
+                            logger.info(f"✅ Found approval for request {request_id} ({tool_name})")
+                            return  # Bypass HITL check
+                        else:
+                            logger.warning(f"⚠️ Request {request_id} not found or not approved")
                 except ValueError:
                     logger.warning(f"Invalid UUID for hitl_request_id: {request_id}")
-                    return # Treat as new request
-                
-                async with AsyncSession(async_engine) as session:
-                    result = await session.execute(
-                        select(HITLRequest).where(
-                            HITLRequest.id == uuid_obj,
-                            HITLRequest.status == 'APPROVED'
-                        )
-                    )
-                    approval = result.scalar_one_or_none()
-                    
-                    if approval:
-                        logger.info(f"✅ Found approval for request {request_id} ({tool_name})")
-                        return  # Bypass HITL check
-                    else:
-                        logger.warning(f"⚠️ Request {request_id} not found or not approved")
+                    # Proceed to raise ApprovalRequiredError
+                except Exception as e:
+                    logger.warning(f"Failed to check request approval: {e}")
+                    # Proceed to raise ApprovalRequiredError
             except Exception as e:
-                logger.warning(f"Failed to check request approval: {e}")
+                logger.warning(f"Failed to import or setup DB context: {e}")
             
         # If we reached here, the tool needs approval
         raise ApprovalRequiredError(
@@ -575,31 +597,67 @@ class MCPManager:
         return str(result)
 
     async def get_all_tools_status(self) -> Dict[str, Any]:
-        """Get status for UI dashboard."""
+        """Get status for UI dashboard. Returns detailed tool info."""
         status = {}
         mcp_servers = self.config_data.get("mcpServers", {})
+        
+        # Load HITL requirements
+        hitl_tools = []
+        if self.hitl_config:
+            hitl_tools = self.hitl_config.get("sensitive_tools", [])
+
         for s_name, server in mcp_servers.items():
             is_connected = s_name in self.server_sessions
             server_enabled = server.get("enabled", True)
+            disabled_tools = server.get("disabled_tools", [])
             
             tool_list = []
             if is_connected:
                 try:
                     # Get actual tools from session if connected
-                    tools_obj = await self.server_sessions[s_name].list_tools()
-                    # Convert to simple list of dicts/strings if needed, or just names
-                    tool_list = [t.name for t in tools_obj]
-                except: 
-                    pass
+                    result = await self.server_sessions[s_name].list_tools()
+                    
+                    # Robust handling of list_tools result
+                    if hasattr(result, 'tools'):
+                        tools_raw = result.tools
+                    elif isinstance(result, list):
+                        tools_raw = result
+                    else:
+                        logger.warning(f"Unexpected list_tools result type for {s_name}: {type(result)}")
+                        tools_raw = []
+
+                    # Convert to detailed list
+                    for t in tools_raw:
+                        tool_list.append({
+                            "name": t.name,
+                            "description": getattr(t, 'description', None),
+                            "enabled": t.name not in disabled_tools,
+                            "hitl": self._is_tool_hitl(t.name)
+                        })
+                except Exception as e:
+                    logger.error(f"Error listing tools for {s_name}: {e}")
             
             status[s_name] = {
                 "enabled": server_enabled,
                 "connected": is_connected,
                 "tools_count": len(tool_list),
                 "tools": tool_list,
-                "disabled_tools": server.get("disabled_tools", [])
+                "disabled_tools": disabled_tools
             }
         return status
+
+    def _is_tool_hitl(self, tool_name: str) -> bool:
+        """Check if tool requires HITL based on patterns."""
+        if not self.hitl_config: return False
+        patterns = self.hitl_config.get("sensitive_tools", [])
+        
+        # Direct match
+        if tool_name in patterns:
+            return True
+            
+        # Glob match
+        import fnmatch
+        return any(fnmatch.fnmatch(tool_name, p) for p in patterns)
 
     async def toggle_server_status(self, server_name: str, enable: bool) -> bool:
         """Enable or disable a server."""
@@ -617,6 +675,9 @@ class MCPManager:
         if not enable:
             # We use pop with default to safely remove if exists, avoiding KeyErrors
             self.server_sessions.pop(server_name, None)
+        else:
+            # Connect if enabling
+            await self.init_server(server_name, config)
             
         return True
 
@@ -641,8 +702,17 @@ class MCPManager:
              
         try:
             if server_name in self.server_sessions:
-                tools = await self.server_sessions[server_name].list_tools()
-                return [t.name for t in tools]
+                result = await self.server_sessions[server_name].list_tools()
+                
+                # Robust handling of list_tools result
+                if hasattr(result, 'tools'):
+                    tools_raw = result.tools
+                elif isinstance(result, list):
+                    tools_raw = result
+                else:
+                    return []
+                    
+                return [t.name for t in tools_raw]
         except Exception as e:
             logger.error(f"Failed to inspect tools for {server_name}: {e}")
             return []
@@ -653,16 +723,17 @@ class MCPManager:
             pass
         return []
 
-    async def toggle_tool_status(self, tool_name: str, enable: bool) -> str:
+    async def toggle_tool_status(self, tool_name: str, enable: bool, server_name: Optional[str] = None) -> str:
         """Persistent toggle of a tool in config."""
-        server_name = None
-        for name, session in self.server_sessions.items():
-            try:
-                tools = await session.list_tools()
-                if any(t.name == tool_name for t in tools):
-                    server_name = name
-                    break
-            except: continue
+        if not server_name:
+            # Search for server containing this tool
+            for name, session in self.server_sessions.items():
+                try:
+                    tools = await session.list_tools()
+                    if any(t.name == tool_name for t in tools):
+                        server_name = name
+                        break
+                except: continue
             
         if not server_name:
             return f"Tool '{tool_name}' not found."
@@ -680,6 +751,28 @@ class MCPManager:
         server_config["disabled_tools"] = disabled_list
         await self._save_config_to_db(server_name, server_config)
         return f"Tool '{tool_name}' {'enabled' if enable else 'disabled'}."
+
+    async def toggle_tool_hitl(self, tool_name: str, enable_hitl: bool) -> str:
+        """Toggle HITL requirement for a tool."""
+        if not self.hitl_config:
+            self.hitl_config = {"sensitive_tools": []}
+            
+        sensitive_tools = self.hitl_config.get("sensitive_tools", [])
+        
+        if enable_hitl and tool_name not in sensitive_tools:
+            sensitive_tools.append(tool_name)
+        elif not enable_hitl and tool_name in sensitive_tools:
+            sensitive_tools.remove(tool_name)
+            
+        self.hitl_config["sensitive_tools"] = sensitive_tools
+        
+        # Persist HITL config
+        await self._save_hitl_config_to_db(self.hitl_config)
+        return f"HITL for '{tool_name}' {'enabled' if enable_hitl else 'disabled'}."
+
+    async def _save_hitl_config_to_db(self, hitl_config: Dict[str, Any]):
+        """Save HITL configuration to user record in DB."""
+        await self.update_user_hitl_config(hitl_config)
 
     async def add_server(self, name: str, config: Dict[str, Any], validate: bool = False) -> bool:
         """Add a new server to the configuration and connect to it."""
