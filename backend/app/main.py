@@ -6,29 +6,29 @@ Production-ready API for AI agent interactions with MCP integration.
 
 import os
 import sys
+import asyncio
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
+from fastapi import FastAPI
 
 # Add project root to path for imports
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from backend.app.config import settings
 from backend.app.api.v1.router import router as api_v1_router
 from backend.app.api.websocket import router as websocket_router
-from backend.app.db import init_db, close_db
+from backend.app.db import close_db
+from backend.app.core.logging import setup_logging
+from backend.app.core.middleware import register_middlewares
+from backend.app.core.exceptions import register_exception_handlers
 
 
 # Configure logging
-logging.basicConfig(
-    level=logging.DEBUG if settings.DEBUG else logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+setup_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -40,15 +40,25 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    
-    # Initialize database (tables should already exist via Alembic)
-    # await init_db()  # Uncomment if you want auto-create tables
-    
+
+    # Start MCP Pool cleanup task
+    from src.core.mcp.pool import mcp_pool
+    cleanup_task = asyncio.create_task(mcp_pool.start_cleanup_loop())
+
     logger.info("Application startup complete")
-    
+
     yield
-    
+
     # Shutdown
+    logger.info("Shutting down background tasks...")
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
+
+    await mcp_pool.shutdown()
+
     logger.info("Shutting down application...")
     await close_db()
     logger.info("Application shutdown complete")
@@ -65,54 +75,11 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
+# Infrastructure
+register_middlewares(app)
+register_exception_handlers(app)
 
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# Exception handlers
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """Handle validation errors with clear messages."""
-    errors = []
-    for error in exc.errors():
-        field = ".".join(str(loc) for loc in error["loc"])
-        errors.append({
-            "field": field,
-            "message": error["msg"],
-            "type": error["type"],
-        })
-    
-    return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={
-            "detail": "Validation error",
-            "errors": errors,
-        },
-    )
-
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler for unhandled errors."""
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={
-            "detail": "Internal server error",
-            "message": str(exc) if settings.DEBUG else "An unexpected error occurred",
-        },
-    )
-
-
-# Include routers
+# Routers
 app.include_router(api_v1_router)
 app.include_router(websocket_router, prefix="/api/v1")
 
@@ -120,7 +87,6 @@ app.include_router(websocket_router, prefix="/api/v1")
 # Health check endpoint
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Health check endpoint for load balancers and monitoring."""
     return {
         "status": "healthy",
         "version": settings.APP_VERSION,
@@ -130,7 +96,6 @@ async def health_check():
 
 @app.get("/", tags=["Root"])
 async def root():
-    """Root endpoint with API information."""
     return {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
@@ -142,7 +107,7 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "backend.app.main:app",
         host="0.0.0.0",

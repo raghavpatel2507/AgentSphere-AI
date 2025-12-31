@@ -10,6 +10,7 @@ from backend.app.core.auth.security import (
     get_password_hash,
     encrypt_value,
     decrypt_value,
+    decrypt_config,
 )
 
 __all__ = [
@@ -21,4 +22,5 @@ __all__ = [
     "get_password_hash",
     "encrypt_value",
     "decrypt_value",
+    "decrypt_config",
 ]

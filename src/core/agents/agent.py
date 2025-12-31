@@ -14,6 +14,7 @@ AGENT_SYSTEM_PROMPT = """YOU ARE A PROACTIVE, HIGH-EXECUTION MULTI-TOOL AGENT.
 4. **LOOP PROTECTION**: If you repeat the same failing tool call 3 times, stop and explain the exact technical blocker to the user.
 5. **EFFICIENCY**: Be concise. Only fetch the data you need. Do not over-scrape or over-crawl.
 6. **STRICT TOOLING**: Never say "I can't interact with external tools". You ARE the interface to those tools. Use them to fulfill the user's request.
+7. **CONTEXT AWARENESS**: You HAVE access to the history of this conversation. Use it to maintain context and answer questions about previous turns.
 """
 
 class Agent:
@@ -36,10 +37,25 @@ class Agent:
         Uses LangGraph's astream_events for granular tracking.
         """
         try:
+            # 0. Adjust messages to avoid doubling the last user input if it was already saved to DB
+            messages = history.copy()
+            # If the last message in history is a HumanMessage and matches user_input, don't append it again
+            # history items could be BaseMessage objects
+            last_msg_content = None
+            if messages:
+                last_msg = messages[-1]
+                if hasattr(last_msg, 'content'):
+                    last_msg_content = last_msg.content
+                elif isinstance(last_msg, tuple) and len(last_msg) > 1:
+                    last_msg_content = last_msg[1]
+                
+            if last_msg_content != user_input:
+                messages.append(("user", user_input))
+            
             config = {"configurable": {"thread_id": "temporary"}} # Not using checkpointer here for turn-based state
             
             async for event in self.agent.astream_events(
-                {"messages": history + [("user", user_input)]}, 
+                {"messages": messages}, 
                 version="v2"
             ):
                 kind = event["event"]

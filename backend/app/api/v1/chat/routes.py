@@ -15,8 +15,8 @@ from sqlalchemy import select
 
 from backend.app.dependencies import get_db, get_current_user
 from backend.app.models.user import User
-from backend.app.models.conversation import Conversation
-from backend.app.models.message import Message
+from backend.app.models.conversation import Conversation, ConversationStatus
+from backend.app.models.message import Message, MessageRole
 from backend.app.api.v1.chat.schemas import (
     NewChatRequest,
     SendMessageRequest,
@@ -50,7 +50,7 @@ async def create_new_chat(
         user_id=current_user.id,
         thread_id=thread_id,
         title=request.title or "New Conversation",
-        status='ACTIVE',
+        status=ConversationStatus.ACTIVE,
     )
     
     db.add(conversation)
@@ -61,7 +61,7 @@ async def create_new_chat(
     if request.initial_message:
         message = Message(
             conversation_id=conversation.id,
-            role='USER',
+            role=MessageRole.USER,
             content=request.initial_message,
         )
         db.add(message)
@@ -107,7 +107,7 @@ async def send_message(
     if not request.is_resume:
         user_message = Message(
             conversation_id=conversation.id,
-            role='USER',
+            role=MessageRole.USER,
             content=request.content,
         )
         db.add(user_message)

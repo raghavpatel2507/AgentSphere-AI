@@ -34,12 +34,20 @@ class TestConnectionRequest(BaseModel):
 # Response Schemas
 # ============================================
 
+class ToolStatus(BaseModel):
+    """Status of a specific tool on a server."""
+    name: str
+    description: Optional[str] = None
+    enabled: bool
+    hitl: bool
+
 class MCPServerResponse(BaseModel):
     """Response for a single MCP server."""
     id: UUID
     name: str
     enabled: bool
     config: Dict[str, Any]
+    tools: List[ToolStatus] = []
     disabled_tools: List[str] = []
     created_at: datetime
     updated_at: datetime
@@ -60,6 +68,20 @@ class TestConnectionResponse(BaseModel):
     message: str
     tools_count: Optional[int] = None
     error: Optional[str] = None
+
+
+class ToggleToolRequest(BaseModel):
+    enabled: bool
+
+
+class ToggleHITLRequest(BaseModel):
+    hitl_enabled: bool
+
+
+class ToolStatusResponse(BaseModel):
+    message: str
+    tool_name: str
+    status: bool
 
 
 class ServerStatusResponse(BaseModel):

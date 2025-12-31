@@ -60,8 +60,9 @@ RULES:
 1. **COMMON KNOWLEDGE**: Respond directly for general info.
 2. **TOOL NECESSITY**: Only select MCP servers for real-time/external data.
 3. If the user is just chatting, respond directly.
-4. Output MUST be valid JSON.
-5. **STRICT EXCLUSIVITY**: If `servers` is not empty, `response` MUST be `null`. Never provide a preamble like "I will help you...". Just select the server and let the agent handle everything.
+4. **HISTORY ACCESS**: You HAVE access to the history of this specific conversation. Use it to answer questions about previous turns. Never say "I don't have access to your chat history" for messages visible in the HISTORY block.
+5. Output MUST be valid JSON.
+6. **STRICT EXCLUSIVITY**: If `servers` is not empty, `response` MUST be `null`. Never provide a preamble like "I will help you...". Just select the server and let the agent handle everything.
 
 JSON FORMAT:
 {{
@@ -69,9 +70,14 @@ JSON FORMAT:
   "servers": ["list", "of", "server", "names", "if", "tools", "needed"]
 }}
 """
+        # Filter history to avoid duplicating the current query if it's already saved
+        display_history = history
+        if history and hasattr(history[-1], 'content') and history[-1].content == user_input:
+            display_history = history[:-1]
+
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"HISTORY:\n{self._format_history(history)}\n\nUSER QUERY: {user_input}"}
+            {"role": "user", "content": f"HISTORY:\n{self._format_history(display_history)}\n\nUSER QUERY: {user_input}"}
         ]
 
         full_content = ""

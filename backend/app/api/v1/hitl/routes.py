@@ -12,7 +12,7 @@ from uuid import UUID
 
 from backend.app.dependencies import get_db, get_current_user
 from backend.app.models.user import User
-from backend.app.models.hitl_request import HITLRequest
+from backend.app.models.hitl_request import HITLRequest, HITLStatus
 from backend.app.models.conversation import Conversation
 from backend.app.api.v1.hitl.schemas import (
     HITLDecisionRequest,
@@ -39,7 +39,7 @@ async def list_pending_requests(
     """
     query = select(HITLRequest).where(
         HITLRequest.user_id == current_user.id,
-        HITLRequest.status == 'PENDING'
+        HITLRequest.status == HITLStatus.PENDING
     )
     
     result = await db.execute(query.order_by(HITLRequest.created_at.desc()).limit(limit))
@@ -211,13 +211,13 @@ async def reject_request(
             detail="HITL request not found"
         )
     
-    if req.status != 'PENDING':
+    if req.status != HITLStatus.PENDING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Request already {req.status.lower()}"
         )
     
-    req.status = 'REJECTED'
+    req.status = HITLStatus.REJECTED
     req.decision_at = datetime.now(timezone.utc)
     req.decision_reason = body.reason if body else None
     await db.commit()
@@ -251,14 +251,14 @@ async def approve_and_whitelist(
             detail="HITL request not found"
         )
     
-    if req.status != 'PENDING':
+    if req.status != HITLStatus.PENDING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Request already {req.status.lower()}"
         )
     
     # Approve the request
-    req.status = 'APPROVED'
+    req.status = HITLStatus.APPROVED
     req.decision_at = datetime.now(timezone.utc)
     req.decision_reason = body.reason
     await db.commit()
