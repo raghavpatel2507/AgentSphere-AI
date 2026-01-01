@@ -8,7 +8,7 @@ in a normalized database schema (conversations and messages tables).
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean, UniqueConstraint, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
-from src.core.config.database import Base
+from backend.app.db import Base
 from datetime import datetime, timezone
 import uuid
 import enum
@@ -211,4 +211,6 @@ class OAuthToken(Base):
 
     def __repr__(self):
         return f"<OAuthToken {self.service} for user {self.user_id}>"
+
+
 

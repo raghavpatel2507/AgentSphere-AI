@@ -13,7 +13,7 @@ import os
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.core.config.tenant_config import get_config_manager
+from backend.app.core.config.tenant_config import get_config_manager
 
 
 async def migrate_configs():
@@ -94,3 +94,4 @@ async def migrate_configs():
 
 if __name__ == "__main__":
     asyncio.run(migrate_configs())
+

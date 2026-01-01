@@ -8,6 +8,7 @@ SIMPLIFIED VERSION - Easy to understand!
 """
 
 import uuid
+from uuid import UUID
 import json
 import logging
 from pathlib import Path
@@ -15,7 +16,7 @@ from typing import Optional, List, Any
 from langchain_core.messages import BaseMessage
 
 logger = logging.getLogger(__name__)
-from src.core.state.conversation_store import (
+from backend.app.core.state.conversation_store import (
     get_or_create_conversation,
     load_messages,
     messages_to_langchain,
@@ -168,8 +169,6 @@ async def load_history(
     Load conversation history from database.
     """
     try:
-        from uuid import UUID
-        
         # Defensive conversion: Ensure we have UUID objects for DB query
         tenant_uuid = tenant_id if isinstance(tenant_id, UUID) else UUID(str(tenant_id))
         user_uuid = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
@@ -204,8 +203,6 @@ async def save_history(
     Save conversation history to database.
     """
     try:
-        from uuid import UUID
-        
         # Defensive conversion: Ensure we have UUID objects for DB query
         tenant_uuid = tenant_id if isinstance(tenant_id, UUID) else UUID(str(tenant_id))
         user_uuid = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
@@ -249,3 +246,4 @@ async def save_history(
             
     except Exception as e:
         logger.error(f"⚠️ Error saving history for {thread_id}: {e}")
+

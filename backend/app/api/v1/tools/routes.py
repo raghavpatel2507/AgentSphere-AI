@@ -41,7 +41,7 @@ async def list_all_tools(
     """
     List all available tools across enabled MCP servers.
     """
-    from src.core.mcp.pool import mcp_pool
+    from backend.app.core.mcp.pool import mcp_pool
     manager = await mcp_pool.get_manager(current_user.id)
     
     all_status = await manager.get_all_tools_status()
@@ -70,7 +70,7 @@ async def get_server_tools(
     """
     List tools for a specific MCP server.
     """
-    from src.core.mcp.pool import mcp_pool
+    from backend.app.core.mcp.pool import mcp_pool
     manager = await mcp_pool.get_manager(current_user.id)
     
     all_status = await manager.get_all_tools_status()
@@ -110,7 +110,7 @@ async def toggle_tool(
     """
     Enable or disable a specific tool.
     """
-    from src.core.mcp.pool import mcp_pool
+    from backend.app.core.mcp.pool import mcp_pool
     manager = await mcp_pool.get_manager(current_user.id)
     
     # Passing server_name to ensure we update the right server config
@@ -128,8 +128,9 @@ async def toggle_tool_hitl(
     """
     Toggle HITL requirement for a tool.
     """
-    from src.core.mcp.pool import mcp_pool
+    from backend.app.core.mcp.pool import mcp_pool
     manager = await mcp_pool.get_manager(current_user.id)
     
     message = await manager.toggle_tool_hitl(tool_name, request.hitl_enabled)
     return MessageResponse(message=message)
+

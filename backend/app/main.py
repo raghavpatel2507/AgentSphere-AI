@@ -25,6 +25,8 @@ from backend.app.db import close_db
 from backend.app.core.logging import setup_logging
 from backend.app.core.middleware import register_middlewares
 from backend.app.core.exceptions import register_exception_handlers
+from backend.app.core.mcp.pool import mcp_pool
+import uvicorn
 
 
 # Configure logging
@@ -42,7 +44,6 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
 
     # Start MCP Pool cleanup task
-    from src.core.mcp.pool import mcp_pool
     cleanup_task = asyncio.create_task(mcp_pool.start_cleanup_loop())
 
     logger.info("Application startup complete")
@@ -106,8 +107,6 @@ async def root():
 
 
 if __name__ == "__main__":
-    import uvicorn
-
     uvicorn.run(
         "backend.app.main:app",
         host="0.0.0.0",
@@ -115,3 +114,4 @@ if __name__ == "__main__":
         reload=settings.DEBUG,
         log_level="debug" if settings.DEBUG else "info",
     )
+

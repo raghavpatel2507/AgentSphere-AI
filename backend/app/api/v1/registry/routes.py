@@ -59,7 +59,7 @@ async def list_registry_apps(
     """
     # Import the registry
     try:
-        from src.core.mcp.registry import SPHERE_REGISTRY, SphereApp
+        from backend.app.core.mcp.registry import SPHERE_REGISTRY, SphereApp
     except ImportError:
         # Fallback if import fails
         return RegistryListResponse(apps=[], total=0, categories=[])
@@ -112,7 +112,7 @@ async def get_registry_app(app_id: str):
     Get details for a specific registry app.
     """
     try:
-        from src.core.mcp.registry import get_app_by_id
+        from backend.app.core.mcp.registry import get_app_by_id
     except ImportError:
         from fastapi import HTTPException, status
         raise HTTPException(
@@ -156,7 +156,7 @@ async def list_categories():
     List all available app categories.
     """
     try:
-        from src.core.mcp.registry import SPHERE_REGISTRY
+        from backend.app.core.mcp.registry import SPHERE_REGISTRY
     except ImportError:
         return []
     
@@ -165,3 +165,4 @@ async def list_categories():
         categories.add(app.category)
     
     return sorted(list(categories))
+

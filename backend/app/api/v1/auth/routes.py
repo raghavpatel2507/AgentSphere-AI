@@ -126,20 +126,23 @@ async def refresh_token(
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired refresh token"
+            detail="Invalid or expired refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     
     if payload.get("type") != "refresh":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token type"
+            detail="Invalid token type",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload"
+            detail="Invalid token payload",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     
     # Verify user still exists and is active
@@ -150,7 +153,8 @@ async def refresh_token(
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or deactivated"
+            detail="User not found or deactivated",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     
     # Create new tokens

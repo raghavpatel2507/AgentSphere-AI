@@ -22,9 +22,9 @@ from sqlalchemy import select, update
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 
 # Import database session factory
-from src.core.config.database import AsyncSessionLocal
+from backend.app.db import AsyncSessionLocal
 # Import models
-from src.core.state.models import Conversation, Message
+from backend.app.core.state.models import Conversation, Message
 
 
 # ============================================
@@ -319,3 +319,5 @@ async def save_langchain_messages(
         
         # Save to database
         await save_message(conversation_id, role, msg.content)
+
+

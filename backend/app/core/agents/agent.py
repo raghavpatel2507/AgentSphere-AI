@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional, Any
 from langchain_core.messages import BaseMessage
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from langgraph.errors import GraphRecursionError
 from mcp_use.client import MCPClient
 
@@ -25,10 +25,10 @@ class Agent:
     def __init__(self, llm: Any, mcp_client: MCPClient, tools: Optional[List[Any]] = None):
         self._tools = tools or []
         self._llm = llm
-        self.agent = create_react_agent(
+        self.agent = create_agent(
             model=llm,
             tools=self._tools,
-            prompt=AGENT_SYSTEM_PROMPT
+            system_prompt=AGENT_SYSTEM_PROMPT
         )
 
     async def execute_streaming(self, user_input: str, history: List[BaseMessage]):
@@ -99,7 +99,7 @@ class Agent:
             logger.error("GraphRecursionError encountered")
             yield {"type": "error", "content": "⚠️ Task too complex or loop detected."}
         except Exception as e:
-            from src.core.mcp.manager import ApprovalRequiredError
+            from backend.app.core.mcp.manager import ApprovalRequiredError
             # Check for ApprovalRequiredError in the cause or the message
             # ReAct agent wraps errors
             err = e
@@ -123,3 +123,4 @@ class Agent:
         """Legacy execution for compatibility."""
         result = await self.agent.ainvoke({"messages": history + [("user", user_input)]})
         return result["messages"]
+

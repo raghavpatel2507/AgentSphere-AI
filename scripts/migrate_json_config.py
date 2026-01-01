@@ -8,11 +8,11 @@ import uuid
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.core.mcp.manager import MCPManager
-from src.core.config.database import async_engine
+from backend.app.core.mcp.manager import MCPManager
+from backend.app.core.config.database import async_engine
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.core.state.models import User, MCPServerConfig
-from src.core.auth.security import get_password_hash
+from backend.app.core.state.models import User, MCPServerConfig
+from backend.app.core.auth.security import get_password_hash
 
 async def migrate_config():
     # Use default IDs compatible with the rest of the app
@@ -59,3 +59,4 @@ async def migrate_config():
 
 if __name__ == "__main__":
     asyncio.run(migrate_config())
+

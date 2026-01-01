@@ -65,8 +65,8 @@ class ChatService:
             # Initialize planner
             yield {"type": "status", "content": "Analyzing request..."}
             
-            from src.core.agents.planner import Planner
-            from src.core.llm.provider import LLMFactory
+            from backend.app.core.agents.planner import Planner
+            from backend.app.core.llm.provider import LLMFactory
             
             planner = Planner()
             
@@ -105,8 +105,8 @@ class ChatService:
             # Initialize MCP and Agent
             yield {"type": "status", "content": f"Connecting to agents: {', '.join(servers_to_use)}..."}
             
-            from src.core.mcp.pool import mcp_pool
-            from src.core.agents.agent import Agent
+            from backend.app.core.mcp.pool import mcp_pool
+            from backend.app.core.agents.agent import Agent
             
             mcp_manager = await mcp_pool.get_manager(
                 self.user_id, 
@@ -287,7 +287,7 @@ class ChatService:
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Generate direct LLM response without tools."""
         try:
-            from src.core.llm.provider import LLMFactory
+            from backend.app.core.llm.provider import LLMFactory
             
             llm = LLMFactory.load_config_and_create_llm()
             
@@ -309,3 +309,4 @@ class ChatService:
         except Exception as e:
             logger.error(f"Direct response error: {e}")
             yield {"type": "error", "content": f"Error: {str(e)}"}
+

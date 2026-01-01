@@ -8,11 +8,13 @@ import asyncio
 import os
 import logging
 from typing import List
-from src.core.agents.planner import Planner
-from src.core.agents.agent import Agent
-from src.core.mcp.manager import MCPManager
-from src.core.llm.provider import LLMFactory
-from src.core.state import (
+from uuid import UUID
+from backend.app.core.agents.planner import Planner
+from backend.app.core.agents.agent import Agent
+from backend.app.core.mcp.manager import MCPManager
+from backend.app.core.mcp.registry import SPHERE_REGISTRY, get_app_by_id
+from backend.app.core.llm.provider import LLMFactory
+from backend.app.core.state import (
     get_or_create_session,
     clear_current_session,
     load_history,
@@ -54,12 +56,12 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("openai").setLevel(logging.WARNING)
 
-# keep mcp_use and src.core at INFO level for progress
+# keep mcp_use and backend.app.core at INFO level for progress
 mcp_logger = logging.getLogger("mcp_use")
 mcp_logger.setLevel(logging.INFO)
 mcp_logger.propagate = True
 
-core_logger = logging.getLogger("src.core")
+core_logger = logging.getLogger("backend.app.core")
 core_logger.setLevel(logging.INFO)
 core_logger.propagate = True
 
@@ -92,7 +94,6 @@ async def main():
     
     # Validate UUIDs
     try:
-        from uuid import UUID
         UUID(tenant_id)  # Validate tenant_id
         UUID(user_id)    # Validate user_id
     except ValueError as e:
@@ -298,3 +299,4 @@ if __name__ == "__main__":
         loop.run_until_complete(main())
     finally:
         loop.close()
+
