@@ -2,7 +2,7 @@ import asyncio
 import time
 import logging
 from typing import Dict, Optional, Any
-from src.core.mcp.manager import MCPManager
+from backend.app.core.mcp.manager import MCPManager
 
 logger = logging.getLogger(__name__)
 
@@ -98,3 +98,4 @@ class MCPConnectionPool:
 
 # Global instance
 mcp_pool = MCPConnectionPool()
+

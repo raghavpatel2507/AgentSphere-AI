@@ -14,7 +14,9 @@ import requests
 import urllib.parse
 from urllib.parse import urlencode
 import uuid
-from src.core.mcp.registry import SPHERE_REGISTRY, get_app_by_id
+import copy
+from langchain_core.messages import HumanMessage, AIMessage
+from backend.app.core.mcp.registry import SPHERE_REGISTRY, get_app_by_id
 
 # Set page config first
 st.set_page_config(
@@ -86,12 +88,12 @@ def run_async(coro):
         raise e
 
 # Project Modules
-from src.core.agents.planner import Planner
-from src.core.agents.agent import Agent
-from src.core.mcp.manager import MCPManager
-from src.core.llm.provider import LLMFactory
-from src.core.auth.service import AuthService
-from src.core.state import (
+from backend.app.core.agents.planner import Planner
+from backend.app.core.agents.agent import Agent
+from backend.app.core.mcp.manager import MCPManager
+from backend.app.core.llm.provider import LLMFactory
+from backend.app.core.auth.service import AuthService
+from backend.app.core.state import (
     get_or_create_session,
     clear_current_session,
     load_history,
@@ -225,7 +227,6 @@ async def process_message_async(user_input: str, planner, mcp_manager, history, 
             tools = await mcp_manager.get_tools_for_servers(plan['servers'])
             agent = Agent(llm=llm, mcp_client=mcp_manager._mcp_client, tools=tools)
             
-            from langchain_core.messages import HumanMessage, AIMessage
             history.append(HumanMessage(content=user_input))
             
             full_agent_response = ""
@@ -275,7 +276,6 @@ async def process_message_async(user_input: str, planner, mcp_manager, history, 
             full_response = full_agent_response
             history.append(AIMessage(content=full_response))
         else:
-            from langchain_core.messages import HumanMessage, AIMessage
             full_response = plan.get("response", full_direct_response) or "I can help with that."
             # If it wasn't already streamed (unlikely), show it now
             if not full_direct_response:
@@ -404,7 +404,6 @@ def render_sphere_app_center():
                 with c1:
                     if st.button("🚀 Connect & Verify", use_container_width=True, type="primary"):
                         # Construct config from template
-                        import copy
                         config = copy.deepcopy(app.config_template)
                         # Replace placeholders in ENV
                         if "env" in config:
@@ -788,7 +787,6 @@ def render_main_chat():
                     st.session_state.pending_approval = None
                     st.error("Action rejected by user.")
                     # Optional: Add "Action rejected" to history so agent knows
-                    from langchain_core.messages import AIMessage
                     st.session_state.history.append(AIMessage(content="User rejected the tool execution."))
                     st.rerun()
 
@@ -824,3 +822,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

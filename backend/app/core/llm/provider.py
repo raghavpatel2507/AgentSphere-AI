@@ -2,10 +2,6 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 import os
 import logging
-from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_groq import ChatGroq
-# from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
 
 logger = logging.getLogger(__name__)
@@ -20,12 +16,13 @@ class LLMProvider(ABC):
 
 class OpenAIProvider(LLMProvider):
     def create_model(self, config: Dict[str, Any]) -> BaseChatModel:
+        from langchain_openai import ChatOpenAI
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY not found in environment")
             
         return ChatOpenAI(
-            model_name=config.get("model", "gpt-4o"),
+            model_name=config.get("model", "gpt-4.1-mini"),
             temperature=config.get("temperature", 0.7),
             openai_api_key=api_key,
             max_retries=3,
@@ -34,6 +31,7 @@ class OpenAIProvider(LLMProvider):
 
 class OpenROuterProvider(LLMProvider):
     def create_model(self, config: Dict[str, Any]) -> BaseChatModel:
+        from langchain_openai import ChatOpenAI
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             raise ValueError("OPENROUTER_API_KEY not found in environment")
@@ -48,6 +46,7 @@ class OpenROuterProvider(LLMProvider):
 
 class GeminiProvider(LLMProvider):
     def create_model(self, config: Dict[str, Any]) -> BaseChatModel:
+        from langchain_google_genai import ChatGoogleGenerativeAI
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError("GOOGLE_API_KEY not found in environment")
@@ -75,6 +74,7 @@ class ClaudeProvider(LLMProvider):
 
 class GroqProvider(LLMProvider):
     def create_model(self, config: Dict[str, Any]) -> BaseChatModel:
+        from langchain_groq import ChatGroq
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
             raise ValueError("GROQ_API_KEY not found in environment")
@@ -109,14 +109,12 @@ class LLMFactory:
         return provider.create_model(config)
 
     @staticmethod
-    def load_config_and_create_llm(config_path: str = "multi_server_config.json") -> BaseChatModel:
-        """Loads config from file or env and creates LLM."""
-        import json
+    def load_config_and_create_llm() -> BaseChatModel:
+        """Loads config from environment variables and creates LLM."""
         from pathlib import Path
         from dotenv import load_dotenv
         
         # Find and load .env from project root
-        # This file is at src/core/llm/provider.py -> go up 3 levels to project root
         project_root = Path(__file__).resolve().parent.parent.parent.parent
         env_file = project_root / ".env"
         if env_file.exists():
@@ -124,25 +122,11 @@ class LLMFactory:
         
         # Default configuration from environment variables
         config = {
-            "provider": os.getenv("LLM_PROVIDER", "openai"),  # Changed from openrouter to openai
-            "model": os.getenv("MODEL_NAME", "gpt-4o"),
+            "provider": os.getenv("LLM_PROVIDER", "openai"),
+            "model": os.getenv("MODEL_NAME", "gpt-4.1-mini"),
             "temperature": float(os.getenv("LLM_TEMPERATURE", "0.7")),
             "max_tokens": int(os.getenv("MAX_TOKENS", "100000")) if os.getenv("MAX_TOKENS") else None
         }
         
-        # Try loading from multi_server_config.json if it exists (for overrides if any)
-        config_file = project_root / config_path
-        if config_file.exists():
-            try:
-                with open(config_file, 'r') as f:
-                    full_config = json.load(f)
-                    # extending support if user still wants to put llm config in multi_server_config.json
-                    llm_settings = full_config.get("llm", {})
-                    if llm_settings:
-                        config.update(llm_settings)
-                        logger.info(f"Updated LLM config from {config_path}: {llm_settings}")
-            except Exception as e:
-                logger.warning(f"Error loading LLM config from {config_path}: {e}")
-            
         return LLMFactory.create_llm(config)
 

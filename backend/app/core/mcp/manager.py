@@ -27,10 +27,10 @@ from mcp_use.client.middleware.middleware import Middleware, MiddlewareContext
 
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.core.config.database import async_engine
-from src.core.state.models import User, MCPServerConfig
-from src.core.auth.security import encrypt_value, decrypt_value, decrypt_config
-from src.core.mcp.registry import SPHERE_REGISTRY, get_app_by_id
+from backend.app.db import async_engine
+from backend.app.core.state.models import User, MCPServerConfig
+from backend.app.core.auth.security import encrypt_value, decrypt_value, decrypt_config
+from backend.app.core.mcp.registry import SPHERE_REGISTRY, get_app_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -527,7 +527,7 @@ class MCPManager:
             try:
                 from sqlalchemy import select
                 from sqlalchemy.ext.asyncio import AsyncSession
-                from src.core.config.database import async_engine
+                from backend.app.db import async_engine
                 from backend.app.models.hitl_request import HITLRequest
                 from uuid import UUID
                 
@@ -816,4 +816,6 @@ class MCPManager:
         except Exception as e:
             logger.error(f"Failed to remove server {name}: {e}")
             return False
+
+
 

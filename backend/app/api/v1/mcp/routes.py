@@ -49,7 +49,7 @@ async def list_servers(
     """
     List all configured MCP servers for the current user.
     """
-    from src.core.mcp.pool import mcp_pool
+    from backend.app.core.mcp.pool import mcp_pool
     manager = await mcp_pool.get_manager(current_user.id)
     
     # Get live status from manager (includes connected status and tools)
@@ -94,7 +94,7 @@ async def add_server(
     """
     Add a new MCP server configuration.
     """
-    from src.core.mcp.pool import mcp_pool
+    from backend.app.core.mcp.pool import mcp_pool
     manager = await mcp_pool.get_manager(current_user.id)
     
     # Check if server with same name already exists
@@ -262,7 +262,7 @@ async def remove_server(
     """
     Remove an MCP server configuration.
     """
-    from src.core.mcp.pool import mcp_pool
+    from backend.app.core.mcp.pool import mcp_pool
     manager = await mcp_pool.get_manager(current_user.id)
     
     success = await manager.remove_server(server_name)
@@ -287,7 +287,7 @@ async def enable_server(
     """
     Enable an MCP server.
     """
-    from src.core.mcp.pool import mcp_pool
+    from backend.app.core.mcp.pool import mcp_pool
     manager = await mcp_pool.get_manager(current_user.id)
     
     success = await manager.toggle_server_status(server_name, True)
@@ -309,7 +309,7 @@ async def disable_server(
     """
     Disable an MCP server.
     """
-    from src.core.mcp.pool import mcp_pool
+    from backend.app.core.mcp.pool import mcp_pool
     manager = await mcp_pool.get_manager(current_user.id)
     
     success = await manager.toggle_server_status(server_name, False)
@@ -371,5 +371,6 @@ async def test_server_connection(
             message=f"Failed to connect to '{server_name}': {str(e)}",
             error=str(e),
         )
+
 
 

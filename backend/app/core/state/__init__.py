@@ -1,6 +1,6 @@
 """Core configuration package."""
 
-from .database import (
+from backend.app.db import (
     async_engine,
     sync_engine,
     AsyncSessionLocal,

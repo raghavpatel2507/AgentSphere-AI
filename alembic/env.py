@@ -12,8 +12,8 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.core.config.database import Base, DATABASE_URL
-from src.core.state.models import Conversation, Message
+from backend.app.core.config.database import Base, DATABASE_URL
+from backend.app.core.state.models import Conversation, Message
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -90,3 +90,4 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
+

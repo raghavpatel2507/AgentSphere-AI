@@ -2,7 +2,6 @@ import json
 import logging
 from typing import Dict, List, Any, Union, Optional
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
-from langchain_openai import ChatOpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -14,11 +13,18 @@ class Planner:
     
     def __init__(self, model_name: Optional[str] = None, api_key: Optional[str] = None):
         # Use centralized LLMFactory
-        from src.core.llm.provider import LLMFactory
+        from backend.app.core.llm.provider import LLMFactory
         self.llm = LLMFactory.load_config_and_create_llm()
+        
+        # Apply overrides if provided
         if model_name:
-            # Override if specifically provided
-             self.llm.model_name = model_name
+             if hasattr(self.llm, 'model_name'):
+                self.llm.model_name = model_name
+             elif hasattr(self.llm, 'model'):
+                self.llm.model = model_name
+        
+        # Note: api_key is currently handled via .env and LLMFactory
+        # but we keep it in the signature to avoid breaking callers.
 
     def _format_history(self, history: List[BaseMessage]) -> str:
         formatted = []
@@ -161,3 +167,4 @@ JSON FORMAT:
         except Exception as e:
             logger.error(f"Planning failed: {e}")
             yield {"response": "I encountered an error planning your task.", "servers": []}
+
