@@ -27,7 +27,7 @@ from backend.app.api.v1.auth.schemas import (
     UserResponse,
     MessageResponse,
 )
-from backend.app.config import settings
+from backend.app.config import config
 
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -107,7 +107,7 @@ async def login(
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        expires_in=config.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
 
 
@@ -165,7 +165,7 @@ async def refresh_token(
     return TokenResponse(
         access_token=access_token,
         refresh_token=new_refresh_token,
-        expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        expires_in=config.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
 
 

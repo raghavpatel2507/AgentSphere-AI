@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from uuid import UUID
 
-from backend.app.config import settings
+from backend.app.config import config
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
@@ -26,14 +26,14 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=config.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire, "type": "access"})
     
     encoded_jwt = jwt.encode(
         to_encode, 
-        settings.JWT_SECRET_KEY, 
-        algorithm=settings.JWT_ALGORITHM
+        config.JWT_SECRET_KEY, 
+        algorithm=config.JWT_ALGORITHM
     )
     return encoded_jwt
 
@@ -54,14 +54,14 @@ def create_refresh_token(data: Dict[str, Any], expires_delta: Optional[timedelta
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
+        expire = datetime.now(timezone.utc) + timedelta(days=config.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
     
     to_encode.update({"exp": expire, "type": "refresh"})
     
     encoded_jwt = jwt.encode(
         to_encode, 
-        settings.JWT_SECRET_KEY, 
-        algorithm=settings.JWT_ALGORITHM
+        config.JWT_SECRET_KEY, 
+        algorithm=config.JWT_ALGORITHM
     )
     return encoded_jwt
 
@@ -79,8 +79,8 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         payload = jwt.decode(
             token, 
-            settings.JWT_SECRET_KEY, 
-            algorithms=[settings.JWT_ALGORITHM]
+            config.JWT_SECRET_KEY, 
+            algorithms=[config.JWT_ALGORITHM]
         )
         return payload
     except JWTError:

@@ -12,7 +12,7 @@ from sqlalchemy import select
 from backend.app.dependencies import get_db, get_current_user
 from backend.app.models.user import User
 from backend.app.models.mcp_server import MCPServerConfig
-from backend.app.core.auth import encrypt_value, decrypt_value, decrypt_config
+from backend.app.core.auth import encrypt_config, decrypt_config
 from backend.app.api.v1.mcp.schemas import (
     AddServerRequest,
     UpdateServerRequest,
@@ -65,11 +65,24 @@ async def list_servers(
     for db_cfg in db_configs:
         status_info = all_status.get(db_cfg.name, {})
         
+        # Prepare a "safe" version of the config for the UI list
+        safe_config = {}
+        try:
+            full_config = decrypt_config(db_cfg.config)
+            safe_config = {
+                "command": full_config.get("command", "unknown"),
+                "args": full_config.get("args", []),
+                # Omit env and encrypted blobs
+            }
+        except:
+            safe_config = {"command": "unknown", "args": []}
+
         server_responses.append(MCPServerResponse(
             id=db_cfg.id,
             name=db_cfg.name,
             enabled=db_cfg.enabled,
-            config=_mask_sensitive_config(db_cfg.config),
+            connected=status_info.get("connected", False),
+            config=safe_config,
             disabled_tools=db_cfg.disabled_tools or [],
             tools=status_info.get("tools", []),
             created_at=db_cfg.created_at,
@@ -120,15 +133,36 @@ async def add_server(
             detail=f"Server '{request.name}' already exists"
         )
 
-    # Use Manager to Add
-    # Note: request.config contains sensitive data unencrypted. 
-    # manager.add_server expects raw config and handles encryption.
+    # Create a temporary test session to validate config before saving
+    from mcp_use.client import MCPClient
+    test_client = MCPClient()
+    try:
+        # Use request.config directly for test
+        test_session = await test_client.create_session("temp_test", request.config)
+        # If we reach here, connection was successful
+        # We don't need to list tools, just knowing it spawns is enough
+    except Exception as e:
+        logger.error(f"Failed to validate server {request.name} before adding: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to connect to server with provided config: {str(e)}"
+        )
+    finally:
+        # Client cleanup handled by GC or explicit close if library supports it
+        pass
+
+    # Success -> Persist using Manager
+    await manager.save_server_config(request.name, request.config)
     
-    # We validate connection by default? Original logic didn't validate unless requested?
+    # Reload local cache
+    await manager.initialize()
+    
+    # Return response (fetch back what was saved)
+    return await list_servers(current_user, db) # Simplified response return
     # Original route saved then returned.
     # manager.add_server(validate=False) saves and connects.
-    
-    success = await manager.add_server(request.name, request.config, validate=False)
+    # Note: request.config is decrypted here, manager will encrypt it.
+    success = await manager.save_server_config(request.name, request.config)
     
     if not success:
          raise HTTPException(
@@ -220,18 +254,16 @@ async def update_server(
         )
     
     if request.config is not None:
-        # Encrypt sensitive values
-        config = request.config.copy()
-        if "env" in config:
-            encrypted_env = {}
-            for key, value in config["env"].items():
-                if any(s in key.upper() for s in ["KEY", "TOKEN", "SECRET", "PASSWORD"]):
-                    encrypted_env[key] = encrypt_value(str(value)) if value else value
-                    server.is_encrypted = True
-                else:
-                    encrypted_env[key] = value
-            config["env"] = encrypted_env
-        server.config = config
+        # Save will handle encryption
+        await manager.save_server_config(server_name, request.config)
+        # Refresh to get updated state
+        result = await db.execute(
+            select(MCPServerConfig).where(
+                MCPServerConfig.user_id == current_user.id,
+                MCPServerConfig.name == server_name
+            )
+        )
+        server = result.scalar_one()
     
     if request.enabled is not None:
         server.enabled = request.enabled
@@ -348,21 +380,36 @@ async def test_server_connection(
         )
     
     try:
-        # Decrypt config if needed before testing
-        config = server.config
-        if server.is_encrypted:
-            config = decrypt_config(config)
-            
-        # Import MCP service for testing
-        from backend.app.services.mcp_service import MCPService
+        # Import MCP pool for testing
+        from backend.app.core.mcp.pool import mcp_pool
         
-        mcp_service = MCPService(current_user.id)
-        tools_count = await mcp_service.test_server_connection(server_name, config)
+        manager = await mcp_pool.get_manager(current_user.id)
+        
+        # Establishing a persistent connection via restart_server
+        # (This establishes the session in the manager instance used by the chat)
+        await manager.restart_server(server_name)
+        
+        # Get live tool status (this will now be populated because we are connected)
+        all_status = await manager.get_all_tools_status()
+        status_info = all_status.get(server_name, {})
+        
+        if not status_info.get("connected"):
+            # If restart didn't result in connection
+            return TestConnectionResponse(
+                success=False,
+                message=f"Failed to connect to '{server_name}'",
+                tools_count=0,
+                tools=[]
+            )
+
+        tools = status_info.get("tools", [])
+        tool_names = [t.get("name") for t in tools]
         
         return TestConnectionResponse(
             success=True,
             message=f"Successfully connected to '{server_name}'",
-            tools_count=tools_count,
+            tools_count=len(tool_names),
+            tools=tool_names,
         )
     except Exception as e:
         logger.error(f"Test connection error for {server_name}: {e}", exc_info=True)

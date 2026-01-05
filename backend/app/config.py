@@ -15,43 +15,43 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
 
 
-class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
+class AppConfig(BaseSettings):
+    """Application configuration loaded from environment variables."""
     
     # Application
     APP_NAME: str = "AgentSphere-AI"
     APP_VERSION: str = "2.0.0"
     DEBUG: bool = False
     
-    # Database (from existing .env)
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:root@localhost:5432/agentsphere"
+    # Database
+    DATABASE_URL: str
     POSTGRES_POOL_SIZE: int = 20
     POSTGRES_MAX_OVERFLOW: int = 10
     
     # JWT Configuration
-    JWT_SECRET_KEY: str = "change-me-in-production"
+    JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 1 day (24 hours)
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
-    # Encryption (from existing .env)
+    # Encryption
     ENCRYPTION_KEY: Optional[str] = None
     
-    # LLM Configuration (from existing .env)
+    # LLM Configuration
     LLM_PROVIDER: str = "openai"
-    MODEL_NAME: str = "gpt-4o"  # Match .env.example
+    MODEL_NAME: str = "gpt-4o"
     OPENAI_API_KEY: Optional[str] = None
     GOOGLE_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
     
     # CORS
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://localhost:8080"  # Parse as string, split later
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://localhost:8080"
     
     # HITL
-    HITL_REQUEST_TIMEOUT_SECONDS: int = 300  # 5 minutes default
+    HITL_REQUEST_TIMEOUT_SECONDS: int = 300
     
-    # OAuth (optional)
+    # OAuth
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
     ZOHO_CLIENT_ID: Optional[str] = None
@@ -73,11 +73,11 @@ class Settings(BaseSettings):
 
 
 @lru_cache()
-def get_settings() -> Settings:
-    """Get cached settings instance."""
-    return Settings()
+def get_config() -> AppConfig:
+    """Get cached configuration instance."""
+    return AppConfig()
 
 
 # Export for convenience
-settings = get_settings()
+config = get_config()
 

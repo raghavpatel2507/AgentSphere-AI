@@ -1,5 +1,6 @@
 """
 Pydantic schemas for chat endpoints.
+Updated for simplified HITL flow.
 """
 
 from typing import Optional, List, Any, Dict
@@ -33,18 +34,13 @@ class NewChatRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     """Request body for sending a message."""
     content: str = Field(..., min_length=1, max_length=32000)
-    is_resume: bool = Field(False, description="True if resuming after HITL approval")
-    
-    # HITL approval continuation (optional)
-    hitl_request_id: Optional[str] = None
-    hitl_decision: Optional[str] = Field(None, pattern="^(approved|rejected)$")
 
 
-class HITLApprovalRequest(BaseModel):
-    """Request body for HITL approval inline with message."""
-    request_id: UUID
-    approved: bool
-    reason: Optional[str] = None
+class ResumeRequest(BaseModel):
+    """Request body for resuming chat after HITL approval."""
+    decisions: List[Dict[str, Any]]
+    # Example: [{"type": "approve"}] 
+    # or [{"type": "edit", "edited_action": {"name": "...", "args": {...}}}]
 
 
 # ============================================
@@ -60,20 +56,6 @@ class ChatResponse(BaseModel):
     
     class Config:
         from_attributes = True
-
-
-class StreamEvent(BaseModel):
-    """A single streaming event."""
-    type: StreamEventType
-    content: Optional[str] = None
-    tool: Optional[str] = None
-    inputs: Optional[Dict[str, Any]] = None
-    output: Optional[Any] = None
-    request_id: Optional[str] = None
-    tool_name: Optional[str] = None
-    tool_args: Optional[Dict[str, Any]] = None
-    final_response: Optional[str] = None
-    message: Optional[str] = None
 
 
 class MessageResponse(BaseModel):
@@ -93,5 +75,7 @@ class ChatStatusResponse(BaseModel):
     """Response for chat status check."""
     thread_id: str
     is_processing: bool
-    pending_approval: Optional[UUID] = None
+    has_pending_approval: bool
+    pending_tool_name: Optional[str] = None
+    pending_tool_args: Optional[Dict[str, Any]] = None
     last_activity: Optional[datetime] = None
