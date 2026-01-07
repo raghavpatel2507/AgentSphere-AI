@@ -10,6 +10,7 @@ from backend.app.core.auth.security import (
     get_password_hash,
     encrypt_value,
     decrypt_value,
+    encrypt_config,
     decrypt_config,
 )
 

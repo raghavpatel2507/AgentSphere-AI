@@ -18,14 +18,15 @@ project_root = os.path.dirname(
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from backend.app.config import settings
+from backend.app.config import config
 from backend.app.api.v1.router import router as api_v1_router
 from backend.app.api.websocket import router as websocket_router
-from backend.app.db import close_db
+from backend.app.db import init_db, close_db
 from backend.app.core.logging import setup_logging
 from backend.app.core.middleware import register_middlewares
 from backend.app.core.exceptions import register_exception_handlers
 from backend.app.core.mcp.pool import mcp_pool
+from backend.app.core.state.checkpointer import initialize_checkpointer, shutdown_checkpointer
 import uvicorn
 
 
@@ -41,7 +42,13 @@ async def lifespan(app: FastAPI):
     Initializes resources on startup and cleans up on shutdown.
     """
     # Startup
-    logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+    logger.info(f"Starting {config.APP_NAME} v{config.APP_VERSION}")
+
+    # Init DB Tables
+    await init_db()
+
+    # Init Checkpointer
+    await initialize_checkpointer()
 
     # Start MCP Pool cleanup task
     cleanup_task = asyncio.create_task(mcp_pool.start_cleanup_loop())
@@ -59,6 +66,7 @@ async def lifespan(app: FastAPI):
         pass
 
     await mcp_pool.shutdown()
+    await shutdown_checkpointer()
 
     logger.info("Shutting down application...")
     await close_db()
@@ -67,9 +75,9 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI application
 app = FastAPI(
-    title=settings.APP_NAME,
+    title=config.APP_NAME,
     description="Production-ready API for AI agent interactions with MCP (Model Context Protocol) integration.",
-    version=settings.APP_VERSION,
+    version=config.APP_VERSION,
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -90,16 +98,16 @@ app.include_router(websocket_router, prefix="/api/v1")
 async def health_check():
     return {
         "status": "healthy",
-        "version": settings.APP_VERSION,
-        "service": settings.APP_NAME,
+        "version": config.APP_VERSION,
+        "service": config.APP_NAME,
     }
 
 
 @app.get("/", tags=["Root"])
 async def root():
     return {
-        "name": settings.APP_NAME,
-        "version": settings.APP_VERSION,
+        "name": config.APP_NAME,
+        "version": config.APP_VERSION,
         "docs": "/docs",
         "health": "/health",
         "api_prefix": "/api/v1",
@@ -111,7 +119,7 @@ if __name__ == "__main__":
         "backend.app.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=settings.DEBUG,
-        log_level="debug" if settings.DEBUG else "info",
+        reload=config.DEBUG,
+        log_level="debug" if config.DEBUG else "info",
     )
 

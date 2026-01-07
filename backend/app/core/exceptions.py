@@ -4,7 +4,7 @@ import logging
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from backend.app.config import settings
+from backend.app.config import config
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,6 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
                 "detail": "Internal server error",
-                "message": str(exc) if settings.DEBUG else "An unexpected error occurred",
+                "message": str(exc) if config.DEBUG else "An unexpected error occurred",
             },
         )

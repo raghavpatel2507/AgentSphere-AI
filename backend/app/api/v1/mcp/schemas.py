@@ -46,11 +46,15 @@ class MCPServerResponse(BaseModel):
     id: UUID
     name: str
     enabled: bool
-    config: Dict[str, Any]
+    connected: bool = False
+    config: Optional[Dict[str, Any]] = None
     tools: List[ToolStatus] = []
     disabled_tools: List[str] = []
     created_at: datetime
     updated_at: datetime
+    icon: Optional[str] = None
+    status: Optional[str] = "Details unknown"
+    tools_count: int = 0
     
     class Config:
         from_attributes = True
@@ -67,6 +71,7 @@ class TestConnectionResponse(BaseModel):
     success: bool
     message: str
     tools_count: Optional[int] = None
+    tools: Optional[List[str]] = None
     error: Optional[str] = None
 
 

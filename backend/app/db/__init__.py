@@ -4,24 +4,22 @@ from typing import Optional, AsyncGenerator, Generator
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base, sessionmaker
-from backend.app.config import settings
+from backend.app.config import config
 
 logger = logging.getLogger(__name__)
 
 # Single source of truth for Base
 Base = declarative_base()
 
-# Database configuration from settings
-DATABASE_URL = settings.DATABASE_URL
-POSTGRES_POOL_SIZE = settings.POSTGRES_POOL_SIZE
-POSTGRES_MAX_OVERFLOW = settings.POSTGRES_MAX_OVERFLOW
+# Fetch DATABASE_URL from config
+DATABASE_URL = config.DATABASE_URL
 
 # Async engine for async operations
 async_engine = create_async_engine(
     DATABASE_URL,
-    pool_size=POSTGRES_POOL_SIZE,
-    max_overflow=POSTGRES_MAX_OVERFLOW,
-    echo=False,
+    echo=config.DEBUG,
+    pool_size=config.POSTGRES_POOL_SIZE,
+    max_overflow=config.POSTGRES_MAX_OVERFLOW,
     pool_pre_ping=True,
 )
 
@@ -36,8 +34,8 @@ AsyncSessionLocal = async_sessionmaker(
 sync_database_url = DATABASE_URL.replace("+asyncpg", "")
 sync_engine = create_engine(
     sync_database_url,
-    pool_size=POSTGRES_POOL_SIZE,
-    max_overflow=POSTGRES_MAX_OVERFLOW,
+    pool_size=config.POSTGRES_POOL_SIZE,
+    max_overflow=config.POSTGRES_MAX_OVERFLOW,
     echo=False,
 )
 

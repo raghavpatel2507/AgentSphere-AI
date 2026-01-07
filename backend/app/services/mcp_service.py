@@ -17,14 +17,26 @@ class MCPService:
     def __init__(self, user_id: UUID):
         self.user_id = user_id
     
-    async def test_server_connection(self, server_name: str, config: Dict[str, Any]) -> int:
-        """Test connection and return tool count."""
-        try:
-            tools = await self.get_tools_for_server(server_name, config)
-            return len(tools)
-        except Exception as e:
-            logger.error(f"Test connection failed for {server_name}: {e}")
-            raise
+    async def test_server_connection(self, server_name: str, config: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Test connection and return list of tools."""
+        import asyncio
+        max_retries = 2
+        
+        for attempt in range(max_retries + 1):
+            try:
+                tools = await self.get_tools_for_server(server_name, config)
+                if tools or attempt == max_retries:
+                    return tools
+                
+                logger.info(f"Attempt {attempt + 1}: No tools found for {server_name}. Retrying in 2s...")
+                await asyncio.sleep(2)
+            except Exception as e:
+                if attempt == max_retries:
+                    logger.error(f"Test connection failed for {server_name} after {max_retries} retries: {e}")
+                    raise
+                logger.warning(f"Attempt {attempt + 1} failed for {server_name}: {e}. Retrying...")
+                await asyncio.sleep(2)
+        return []
 
     async def get_tools_for_server(self, server_name: str, config: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Get tools using session + langchain-mcp-adapters pattern."""

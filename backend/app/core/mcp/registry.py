@@ -24,7 +24,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="accuweather",
         name="AccuWeather",
         description="Weather forecasting and information agent (AccuWeather API).",
-        icon="⛅",
+        icon="https://cdn.brandfetch.io/accuweather.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Weather",
         config_template={
             "command": "npx",
@@ -41,7 +41,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="arxiv",
         name="arXiv",
         description="Search, analyze and read scientific papers from arXiv.",
-        icon="📚",
+        icon="https://cdn.brandfetch.io/arxiv.org/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Research",
         config_template={
             "command": "npx",
@@ -54,28 +54,42 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="github",
         name="GitHub",
         description="GitHub agent for repository management and code operations.",
-        icon="🐙",
+        icon="https://cdn.brandfetch.io/github.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Development",
         config_template={
-            "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-github"],
-            "env": {
-                "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+            "type": "httpx",
+            "url": "https://api.githubcopilot.com/mcp/",
+            "auth": {
+                "client_id": "Ov23lifJTKuOW3wgsH1E",
+                "client_secret": "3991581fe00c3be04c99e1c736389b1a64784b71",
+                "scope": "repo",
+                "callback_port": 8081
             }
         },
-        auth_fields=[
-            AuthField(name="GITHUB_TOKEN", label="Personal Access Token", type="password")
-        ]
+        auth_fields=[]
+    ),
+    SphereApp(
+        id="exa",
+        name="Exa",
+        description="Web crawling, company research, competitor analysis, and research paper retrieval.",
+        icon="https://cdn.brandfetch.io/exa.ai/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Search",
+        config_template={
+            "type": "httpx",
+            "url": "https://mcp.exa.ai/mcp",
+            "headers": {}
+        },
+        auth_fields=[]
     ),
     SphereApp(
         id="giphy",
         name="Giphy",
         description="Giphy integration for searching and retrieving GIFs.",
-        icon="🎬",
+        icon="https://cdn.brandfetch.io/giphy.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Media",
         config_template={
             "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-giphy"],
+            "args": ["-y", "mcp-server-giphy"],
             "env": {
                 "GIPHY_API_KEY": "${GIPHY_API_KEY}"
             }
@@ -85,10 +99,40 @@ SPHERE_REGISTRY: List[SphereApp] = [
         ]
     ),
     SphereApp(
+        id="huggingface",
+        name="Hugging Face",
+        description="Hugging Face Hub integration for accessing models, datasets, spaces, and papers.",
+        icon="https://cdn.brandfetch.io/huggingface.co/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Development",
+        config_template={
+            "type": "httpx",
+            "url": "https://huggingface.co/mcp",
+            "auth": "${HUGGINGFACE_API_KEY}"
+        },
+        auth_fields=[
+            AuthField(name="HUGGINGFACE_API_KEY", label="API Key", type="password")
+        ]
+    ),
+    SphereApp(
+        id="linear",
+        name="linear",
+        description="Linear issue tracking and project management agent. Use Linear in Agentsphere to interact with your data through natural conversation. Just ask and Linear will handle the rest.",
+        icon="https://cdn.brandfetch.io/linear.app/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Development",
+        config_template={
+            "type": "httpx",
+            "url": "https://mcp.linear.app/mcp",
+            "auth": {
+                "callback_port": 8082
+            }
+        },
+        auth_fields=[]
+    ),
+    SphereApp(
         id="coingecko",
         name="CoinGecko",
         description="Cryptocurrency data agent providing real-time prices.",
-        icon="🪙",
+        icon="https://cdn.brandfetch.io/coingecko.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Finance",
         config_template={
             "command": "npx",
@@ -101,7 +145,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="etherscan",
         name="Etherscan",
         description="Ethereum blockchain data and analytics agent.",
-        icon="💎",
+        icon="https://cdn.brandfetch.io/etherscan.io/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Finance",
         config_template={
             "command": "npx",
@@ -118,11 +162,11 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="elevenlabs",
         name="ElevenLabs",
         description="Generate high-quality AI voices and speech synthesis.",
-        icon="🎙️",
+        icon="https://cdn.brandfetch.io/elevenlabs.io/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Media",
         config_template={
-            "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-elevenlabs"],
+            "command": "uvx",
+            "args": ["elevenlabs-mcp"],
             "env": {
                 "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}"
             }
@@ -132,10 +176,77 @@ SPHERE_REGISTRY: List[SphereApp] = [
         ]
     ),
     SphereApp(
+        id="MongoDB",
+        name="MongoDB",
+        description="Mongodb agent to list collections and executing read-only queries on database. Use Mongodb to interact with your data through natural conversation. Just ask and Mongodb will handle the rest.",
+        icon="https://cdn.brandfetch.io/ideyyfT0Lp/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Database",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "mongodb-mcp-server@latest", "--readOnly"],
+            "env": {
+                "MDB_MCP_CONNECTION_STRING": "${MDB_MCP_CONNECTION_STRING}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="MDB_MCP_CONNECTION_STRING", label="Connection String", type="text")
+        ]
+    ),
+    SphereApp(
+        id="Mysql",
+        name="Mysql",
+        description="MySQL agent to list tables and execute read-only SQL queries on database. Use MySQL in Agentsphere to interact with your data through natural conversation. Just ask and MySQL will handle the rest.",
+        icon="https://cdn.brandfetch.io/mysql.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Database",
+        config_template={
+            "command": "npx",
+            "command": "uvx",
+            "args": [
+                "--from",
+                "mysql-mcp-server",
+                "mysql_mcp_server"
+            ],
+            "env": {
+                "MYSQL_HOST": "localhost",
+                "MYSQL_PORT": "3306",
+                "MYSQL_USER": "${MYSQL_USER}",
+                "MYSQL_PASSWORD": "${MYSQL_PASSWORD}",
+                "MYSQL_DATABASE": "${MYSQL_DATABASE}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="MYSQL_USER", label="User", type="text"),
+            AuthField(name="MYSQL_PASSWORD", label="Password", type="password"),
+            AuthField(name="MYSQL_DATABASE", label="Database", type="text")
+        ]
+    ),
+    SphereApp(
+        id="google-calendar",
+        name="Google Calendar",
+        description="Google Calendar integration for managing events and appointments.",
+        icon="https://cdn.brandfetch.io/google.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Calendar",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@cocal/google-calendar-mcp"],
+            "env": {
+                "GOOGLE_OAUTH_CREDENTIALS": "${GOOGLE_DRIVE_OAUTH_CREDENTIALS}"
+            }
+        },
+        auth_fields=[
+            AuthField(
+                name="GOOGLE_DRIVE_OAUTH_CREDENTIALS", 
+                label="OAuth Credentials JSON Path", 
+                type="text", 
+                description="Full path to your gcp-oauth.keys.json"
+            )
+        ]
+    ),
+    SphereApp(
         id="playwright-mcp",
         name="Playwright",
         description="Browser automation agent for web scraping and testing.",
-        icon="🎭",
+        icon="https://cdn.brandfetch.io/playwright.dev/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Tooling",
         config_template={
             "command": "npx",
@@ -151,7 +262,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="google-drive",
         name="Google Drive",
         description="Connect and manage your Google Drive files.",
-        icon="📂",
+        icon="https://cdn.brandfetch.io/google.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Storage",
         config_template={
             "command": "npx",
@@ -168,7 +279,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="pinecone-mcp",
         name="Pinecone",
         description="Vector database agent for semantic search and long-term memory.",
-        icon="🌲",
+        icon="https://cdn.brandfetch.io/pinecone.io/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Database",
         config_template={
             "command": "npx",
@@ -185,7 +296,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="firecrawl-mcp",
         name="Firecrawl",
         description="Web scraping and crawling agent that converts websites to LLM-ready markdown.",
-        icon="🔥",
+        icon="https://cdn.brandfetch.io/firecrawl.dev/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Search",
         config_template={
             "command": "npx",
@@ -202,7 +313,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="youtube",
         name="YouTube",
         description="Search and fetch video details, transcripts, and metadata.",
-        icon="📺",
+        icon="https://cdn.brandfetch.io/youtube.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Media",
         config_template={
             "command": "npx",
@@ -219,7 +330,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="notion",
         name="Notion",
         description="Connect to your Notion workspace and manage pages and databases.",
-        icon="📝",
+        icon="https://cdn.brandfetch.io/notion.so/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Productivity",
         config_template={
             "command": "npx",
@@ -236,7 +347,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="figma",
         name="Figma",
         description="Access and manage Figma projects, files, and layers.",
-        icon="🎨",
+        icon="https://cdn.brandfetch.io/figma.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Design",
         config_template={
             "command": "npx",
@@ -253,7 +364,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="mobile",
         name="Mobile",
         description="Connect to mobile devices for automation and testing.",
-        icon="📱",
+        icon="https://cdn.brandfetch.io/android.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Tooling",
         config_template={
             "command": "npx",
@@ -266,7 +377,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="aws-knowledge",
         name="AWS Knowledge",
         description="Connect to AWS Knowledge Bases for retrieval-augmented generation.",
-        icon="☁️",
+        icon="https://cdn.brandfetch.io/aws.amazon.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Cloud",
         config_template={
             "type": "httpx",
@@ -281,7 +392,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="zoho",
         name="Zoho",
         description="Connect to Zoho platform for messaging and business tools.",
-        icon="🏢",
+        icon="https://cdn.brandfetch.io/zoho.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Business",
         config_template={
             "type": "httpx",
@@ -298,7 +409,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="brave-search",
         name="Brave Search",
         description="Web search agent for real-time information.",
-        icon="🦁",
+        icon="https://cdn.brandfetch.io/brave.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Search",
         config_template={
             "command": "npx",

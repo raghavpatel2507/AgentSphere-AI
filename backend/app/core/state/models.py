@@ -3,6 +3,8 @@ Database models for conversations and messages.
 
 This module defines the SQLAlchemy models for storing conversation history
 in a normalized database schema (conversations and messages tables).
+
+REMOVED HITLRequest tables as part of simplified HITL migration.
 """
 
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean, UniqueConstraint, Enum as SQLEnum
@@ -19,13 +21,6 @@ class MessageRole(str, enum.Enum):
     USER = "USER"
     ASSISTANT = "ASSISTANT"
     TOOL = "TOOL"
-
-class HITLStatus(str, enum.Enum):
-    """Status for HITL approval requests."""
-    PENDING = "PENDING"
-    APPROVED = "APPROVED"
-    REJECTED = "REJECTED"
-    EXPIRED = "EXPIRED"
 
 class ConversationStatus(str, enum.Enum):
     """Status for conversations."""
@@ -151,34 +146,7 @@ class MCPServerConfig(Base):
         return f"<MCPServerConfig {self.name}>"
 
 
-class HITLRequest(Base):
-    """Stores human-in-the-loop approval requests."""
-    __tablename__ = "hitl_requests"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    conversation_id = Column(UUID(as_uuid=True), ForeignKey('conversations.id', ondelete='CASCADE'), nullable=False, index=True)
-    
-    tool_name = Column(String(255), nullable=False)
-    tool_args = Column(JSONB, nullable=False)
-    server_name = Column(String(255), nullable=True)
-    
-    status = Column(SQLEnum(HITLStatus, name="hitl_status", native_enum=True), default=HITLStatus.PENDING, nullable=False)
-    decision_at = Column(DateTime(timezone=True), nullable=True)
-    decision_reason = Column(Text, nullable=True)
-    
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-
-    @property
-    def is_expired(self) -> bool:
-        """Check if the request has expired."""
-        if not self.expires_at:
-            return False
-        return datetime.now(timezone.utc) > self.expires_at
-
-    def __repr__(self):
-        return f"<HITLRequest {self.tool_name} ({self.status})>"
+# HITLRequest and HITLStatus removed
 
 
 class OAuthToken(Base):
@@ -211,6 +179,3 @@ class OAuthToken(Base):
 
     def __repr__(self):
         return f"<OAuthToken {self.service} for user {self.user_id}>"
-
-
-

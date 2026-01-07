@@ -80,7 +80,7 @@ async def websocket_chat(
     - {"type": "token", "content": "..."}
     - {"type": "tool_start", "tool": "...", "inputs": {...}}
     - {"type": "tool_end", "tool": "...", "output": "..."}
-    - {"type": "approval_required", "request_id": "...", "tool_name": "...", "tool_args": {...}}
+    - {"type": "approval_required", "tool_name": "...", "tool_args": {...}}
     - {"type": "error", "message": "..."}
     - {"type": "done"}
     """
@@ -175,32 +175,7 @@ async def websocket_chat(
                 elif msg_type == "ping":
                     await websocket.send_json({"type": "pong"})
                     
-                elif msg_type == "hitl_decision":
-                    # Handle HITL approval/rejection
-                    request_id = message.get("request_id")
-                    approved = message.get("approved", False)
-                    
-                    if request_id:
-                        from backend.app.models.hitl_request import HITLRequest
-                        from datetime import datetime, timezone
-                        
-                        result = await db.execute(
-                            select(HITLRequest).where(
-                                HITLRequest.id == UUID(request_id),
-                                HITLRequest.user_id == user_id
-                            )
-                        )
-                        hitl_req = result.scalar_one_or_none()
-                        
-                        if hitl_req and hitl_req.status == 'PENDING':
-                            hitl_req.status = 'APPROVED' if approved else 'REJECTED'
-                            hitl_req.decision_at = datetime.now(timezone.utc)
-                            await db.commit()
-                            
-                            await websocket.send_json({
-                                "type": "status",
-                                "content": f"Tool {'approved' if approved else 'rejected'}"
-                            })
+                # Removed hitl_decision: WebSocket handling for HITL is deprecated in favor of REST API /resume
                 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected: {thread_id}")

@@ -10,7 +10,6 @@ from backend.app.api.v1.conversations import router as conversations_router
 from backend.app.api.v1.mcp import router as mcp_router
 from backend.app.api.v1.tools import router as tools_router
 from backend.app.api.v1.registry import router as registry_router
-from backend.app.api.v1.hitl import router as hitl_router
 from backend.app.api.v1.oauth import router as oauth_router
 
 
@@ -24,5 +23,4 @@ router.include_router(conversations_router)
 router.include_router(mcp_router)
 router.include_router(tools_router)
 router.include_router(registry_router)
-router.include_router(hitl_router)
 router.include_router(oauth_router)
