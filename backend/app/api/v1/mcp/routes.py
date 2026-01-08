@@ -55,9 +55,11 @@ async def list_servers(
     # Get live status from manager (includes connected status and tools)
     all_status = await manager.get_all_tools_status()
     
-    # Get icons from registry for matching
+    # Get icons and descriptions from registry for matching
     from backend.app.core.mcp.registry import SPHERE_REGISTRY
-    registry_icons = {app.name: app.icon for app in SPHERE_REGISTRY}
+    registry_data = {app.name: {"icon": app.icon, "description": app.description} for app in SPHERE_REGISTRY}
+    # Also handle ID mapping if name differs
+    registry_data.update({app.id: {"icon": app.icon, "description": app.description} for app in SPHERE_REGISTRY})
     
     # Also fetch from DB for basic info (id, timestamps)
     result = await db.execute(
@@ -89,7 +91,8 @@ async def list_servers(
             config=safe_config,
             disabled_tools=db_cfg.disabled_tools or [],
             tools=status_info.get("tools", []),
-            icon=registry_icons.get(db_cfg.name),
+            icon=registry_data.get(db_cfg.name, {}).get("icon"),
+            description=registry_data.get(db_cfg.name, {}).get("description"),
             created_at=db_cfg.created_at,
             updated_at=db_cfg.updated_at,
         ))
@@ -178,9 +181,10 @@ async def add_server(
     all_status = await manager.get_all_tools_status()
     status_info = all_status.get(server.name, {})
 
-    # Use registry icon if available
+    # Use registry data if available
     from backend.app.core.mcp.registry import SPHERE_REGISTRY
-    registry_icons = {app.name: app.icon for app in SPHERE_REGISTRY}
+    registry_data = {app.name: {"icon": app.icon, "description": app.description} for app in SPHERE_REGISTRY}
+    registry_data.update({app.id: {"icon": app.icon, "description": app.description} for app in SPHERE_REGISTRY})
 
     return MCPServerResponse(
         id=server.id,
@@ -190,7 +194,8 @@ async def add_server(
         config=_mask_sensitive_config(server.config),
         disabled_tools=server.disabled_tools or [],
         tools=status_info.get("tools", []),
-        icon=registry_icons.get(server.name),
+        icon=registry_data.get(server.name, {}).get("icon"),
+        description=registry_data.get(server.name, {}).get("description"),
         created_at=server.created_at,
         updated_at=server.updated_at,
     )

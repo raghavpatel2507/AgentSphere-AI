@@ -102,7 +102,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="huggingface",
         name="Hugging Face",
         description="Hugging Face Hub integration for accessing models, datasets, spaces, and papers.",
-        icon="https://cdn.brandfetch.io/huggingface.co/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/idGqKHD5xE/theme/dark/symbol.svg?c=1bxid64Mup7aczewSAYMX&t=1668516030712",
         category="Development",
         config_template={
             "type": "httpx",
@@ -196,10 +196,9 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="Mysql",
         name="Mysql",
         description="MySQL agent to list tables and execute read-only SQL queries on database. Use MySQL in Agentsphere to interact with your data through natural conversation. Just ask and MySQL will handle the rest.",
-        icon="https://cdn.brandfetch.io/mysql.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/idBdG8DdKe/theme/dark/logo.svg?c=1bxid64Mup7aczewSAYMX&t=1667573657581",
         category="Database",
         config_template={
-            "command": "npx",
             "command": "uvx",
             "args": [
                 "--from",
@@ -224,7 +223,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="google-calendar",
         name="Google Calendar",
         description="Google Calendar integration for managing events and appointments.",
-        icon="https://cdn.brandfetch.io/google.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idMX2_OMSc.svg?c=1bxid64Mup7aczewSAYMX&t=1755572706253",
         category="Calendar",
         config_template={
             "command": "npx",
@@ -262,7 +261,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="google-drive",
         name="Google Drive",
         description="Connect and manage your Google Drive files.",
-        icon="https://cdn.brandfetch.io/google.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idncaAgFGT.svg?c=1bxid64Mup7aczewSAYMX&t=1755572716016",
         category="Storage",
         config_template={
             "command": "npx",
@@ -279,7 +278,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="pinecone-mcp",
         name="Pinecone",
         description="Vector database agent for semantic search and long-term memory.",
-        icon="https://cdn.brandfetch.io/pinecone.io/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/idCLuo1dQ8/theme/dark/logo.svg?c=1bxid64Mup7aczewSAYMX&t=1718349245373",
         category="Database",
         config_template={
             "command": "npx",
@@ -296,7 +295,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="firecrawl-mcp",
         name="Firecrawl",
         description="Web scraping and crawling agent that converts websites to LLM-ready markdown.",
-        icon="https://cdn.brandfetch.io/firecrawl.dev/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/idBmlvZtut/theme/dark/icon.svg?c=1bxid64Mup7aczewSAYMX&t=1755921852181",
         category="Search",
         config_template={
             "command": "npx",
@@ -409,7 +408,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="brave-search",
         name="Brave Search",
         description="Web search agent for real-time information.",
-        icon="https://cdn.brandfetch.io/brave.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/idVWeRGepu/theme/dark/symbol.svg?c=1bxid64Mup7aczewSAYMX&t=1684477845789",
         category="Search",
         config_template={
             "command": "npx",

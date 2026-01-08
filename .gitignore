@@ -1,4 +1,4 @@
-```__pycache__/
+__pycache__/
 *.py[codz]
 *$py.class
 
@@ -203,4 +203,3 @@ backend/app/core/auth/configs
 
 multi_server_config.json
 
-```

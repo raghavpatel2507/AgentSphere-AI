@@ -55,6 +55,7 @@ class MCPServerResponse(BaseModel):
     icon: Optional[str] = None
     status: Optional[str] = "Details unknown"
     tools_count: int = 0
+    description: Optional[str] = None
     
     class Config:
         from_attributes = True
