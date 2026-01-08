@@ -69,6 +69,21 @@ SPHERE_REGISTRY: List[SphereApp] = [
         auth_fields=[]
     ),
     SphereApp(
+        id="atlassian",
+        name="Atlassian Rovo",
+        description="Connect to Jira, Confluence, and Compass. Search, summarize, create and update issues or pages through natural language.",
+        icon="https://cdn.brandfetch.io/atlassian.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Productivity",
+        config_template={
+            "type": "httpx",
+            "url": "https://mcp.atlassian.com/v1/sse",
+            "auth": {
+                "callback_port": 8086
+            }
+        },
+        auth_fields=[]
+    ),
+    SphereApp(
         id="exa",
         name="Exa",
         description="Web crawling, company research, competitor analysis, and research paper retrieval.",
@@ -77,6 +92,45 @@ SPHERE_REGISTRY: List[SphereApp] = [
         config_template={
             "type": "httpx",
             "url": "https://mcp.exa.ai/mcp",
+            "headers": {}
+        },
+        auth_fields=[]
+    ),
+    SphereApp(
+        id="neon",
+        name="Neon",
+        description="Neon is a fully managed serverless PostgreSQL.",
+        icon="https://cdn.brandfetch.io/idEix_YF2n/w/512/h/512/theme/dark/logo.png?c=1bxid64Mup7aczewSAYMX&t=1766979424634",
+        category="Database",
+        config_template={
+            "type": "httpx",
+            "url": "https://mcp.neon.tech/sse",
+            "headers": {}
+        },
+        auth_fields=[]
+    ),
+    SphereApp(
+        id="supabase",
+        name="Supabase",
+        description="Supabase is an open-source Firebase alternative.",
+        icon="https://cdn.brandfetch.io/idsSceG8fK/w/436/h/449/theme/dark/symbol.png?c=1bxid64Mup7aczewSAYMX&t=1668081497517",
+        category="Database",
+        config_template={
+            "type": "httpx",
+            "url": "https://mcp.supabase.com/mcp",
+            "headers": {}
+        },
+        auth_fields=[]
+    ),
+     SphereApp(
+        id="Ahrefs",
+        name="Ahrefs",
+        description="Ahrefs is an SEO platform for website analysis and keyword research.",
+        icon="https://cdn.brandfetch.io/idxB1p5kuP/theme/dark/symbol.svg?c=1bxid64Mup7aczewSAYMX&t=1673962246264",
+        category="SEO",
+        config_template={
+            "type": "httpx",
+            "url": "https://api.ahrefs.com/mcp/mcp",
             "headers": {}
         },
         auth_fields=[]
@@ -131,13 +185,12 @@ SPHERE_REGISTRY: List[SphereApp] = [
     SphereApp(
         id="coingecko",
         name="CoinGecko",
-        description="Cryptocurrency data agent providing real-time prices.",
+        description="CoinGecko is a cryptocurrency data platform.",
         icon="https://cdn.brandfetch.io/coingecko.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Finance",
         config_template={
-            "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-coingecko"],
-            "env": {}
+            "type": "httpx",
+            "url": "https://mcp.api.coingecko.com/sse",
         },
         auth_fields=[]
     ),
@@ -255,7 +308,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
                 "PLAYWRIGHT_HEADLESS": "true"
             }
         },
-        auth_fields=[] # Config is internal mostly, but user could set env
+        auth_fields=[] 
     ),
     SphereApp(
         id="google-drive",
@@ -278,7 +331,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="pinecone-mcp",
         name="Pinecone",
         description="Vector database agent for semantic search and long-term memory.",
-        icon="https://cdn.brandfetch.io/idCLuo1dQ8/theme/dark/logo.svg?c=1bxid64Mup7aczewSAYMX&t=1718349245373",
+        icon="https://cdn.brandfetch.io/idCLuo1dQ8/w/178/h/178/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1718349235873",
         category="Database",
         config_template={
             "command": "npx",
@@ -312,7 +365,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="youtube",
         name="YouTube",
         description="Search and fetch video details, transcripts, and metadata.",
-        icon="https://cdn.brandfetch.io/youtube.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/idVfYwcuQz/theme/dark/symbol.svg?c=1bxid64Mup7aczewSAYMX&t=1728452988041",
         category="Media",
         config_template={
             "command": "npx",
@@ -363,7 +416,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="mobile",
         name="Mobile",
         description="Connect to mobile devices for automation and testing.",
-        icon="https://cdn.brandfetch.io/android.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://avatars.githubusercontent.com/u/205340688?s=48&v=4",
         category="Tooling",
         config_template={
             "command": "npx",
@@ -371,6 +424,23 @@ SPHERE_REGISTRY: List[SphereApp] = [
             "env": {}
         },
         auth_fields=[]
+    ),
+    SphereApp(
+        id="megic",
+        name="Megic",
+        description="megic mcp powerful AI-driven tool that helps developers create beautiful, modern UI components instantly through natural language descriptions. It integrates seamlessly with popular IDEs and provides a streamlined workflow for UI development.",
+        icon="https://avatars.githubusercontent.com/u/199367026?s=48&v=4",
+        category="Development",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@21st-dev/magic@latest"],
+            "env": {
+                "API_KEY": "${MEGIC_API_KEY}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="MEGIC_API_KEY", label="API Key", type="password")
+        ]
     ),
     SphereApp(
         id="aws-knowledge",
@@ -390,19 +460,34 @@ SPHERE_REGISTRY: List[SphereApp] = [
     SphereApp(
         id="zoho",
         name="Zoho",
-        description="Connect to Zoho platform for messaging and business tools.",
+        description="Connect to Zoho platform for messaging and business tools using your Zoho MCP URL.",
         icon="https://cdn.brandfetch.io/zoho.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
         category="Business",
         config_template={
             "type": "httpx",
-            "url": "https://agentsphere-60059048845.zohomcp.in/mcp/message?key=${ZOHO_KEY}",
+            "url": "${ZOHO_URL}",
             "headers": {
                 "Content-Type": "application/json"
             }
         },
         auth_fields=[
-            AuthField(name="ZOHO_KEY", label="Zoho Key", type="text")
+            AuthField(name="ZOHO_URL", label="Zoho MCP URL", type="text", description="Your full Zoho MCP URL (e.g. https://.../mcp/message?key=...)")
         ]
+    ),
+    SphereApp(
+        id="deepwiki",
+        name="DeepWiki",
+        description="DeepWiki automatically generates architecture diagrams, documentation, and links to source code to help you understand unfamiliar codebases quickly.",
+        icon="https://cdn.brandfetch.io/idu_I78wbo/w/231/h/294/theme/dark/logo.png?c=1bxid64Mup7aczewSAYMX&t=1749731825204",
+        category="Research",
+        config_template={
+            "type": "httpx",
+            "url": "https://mcp.deepwiki.com/mcp",
+            "headers": {
+                "Content-Type": "application/json"
+            }
+        },
+        auth_fields=[]
     ),
     SphereApp(
         id="brave-search",
@@ -412,7 +497,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         category="Search",
         config_template={
             "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+            "args": ["-y", "@brave/brave-search-mcp-server", "--transport", "http"],
             "env": {
                 "BRAVE_API_KEY": "${BRAVE_API_KEY}"
             }
