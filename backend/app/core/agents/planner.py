@@ -72,7 +72,7 @@ RULES:
 
 JSON FORMAT:
 {{
-  "response": "Your direct response if no tools needed, otherwise null",
+  "response": "Brief direct response or null",
   "servers": ["list", "of", "server", "names", "if", "tools", "needed"]
 }}
 """
@@ -152,17 +152,37 @@ JSON FORMAT:
                             yielded_len = curr_idx
 
             # Final cleanup and JSON parsing
-            clean_content = full_content
+            clean_content = full_content.strip()
+            
+            # Remove possible think tags or preambles if LLM broke format
+            if "</think>" in clean_content:
+                clean_content = clean_content.split("</think>")[-1].strip()
+
             if "```json" in clean_content:
                 clean_content = clean_content.split("```json")[1].split("```")[0].strip()
             elif "```" in clean_content:
                 clean_content = clean_content.split("```")[1].split("```")[0].strip()
             
+            # Robust JSON extraction
             try:
+                # 1. Try direct parse
                 plan_data = json.loads(clean_content)
+                # If we got response tokens already, ensure plan_data['response'] matches
+                # but prefers the structured data if valid.
                 yield plan_data
             except Exception:
-                yield {"response": full_content, "servers": []}
+                # 2. Try to find the JSON block inside text
+                import re
+                try:
+                    json_match = re.search(r'\{.*\}', clean_content, re.DOTALL)
+                    if json_match:
+                        plan_data = json.loads(json_match.group(0))
+                        yield plan_data
+                    else:
+                        raise ValueError("No JSON block found")
+                except Exception:
+                    # 3. Last fallback: if it doesn't look like JSON at all, treat as direct response
+                    yield {"response": clean_content, "servers": []}
                 
         except Exception as e:
             logger.error(f"Planning failed: {e}")

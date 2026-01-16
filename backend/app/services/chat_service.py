@@ -5,6 +5,9 @@ Simplified to use LangGraph checkpointer for pause/resume.
 """
 
 import logging
+import json
+import codecs
+import re
 from typing import AsyncGenerator, Dict, Any, List, Optional
 from uuid import UUID
 
@@ -76,9 +79,24 @@ class ChatService:
             if not servers_to_use:
                 # Direct response
                 resp = plan_result.get("response", "")
-                if resp and not direct_tokens:
+                
+                # Sanity check: if planner leaked JSON into the response field
+                if isinstance(resp, str) and resp.strip().startswith('{') and '"response":' in resp:
+                    try:
+                        inner_data = json.loads(resp)
+                        resp = inner_data.get("response", resp)
+                    except:
+                        pass
+
+                # Only yield if we haven't streamed anything yet
+                if resp and resp != "null" and not direct_tokens:
                     yield {"type": "token", "content": resp}
-                await self._save_assistant_message(conversation.id, resp or "".join(direct_tokens))
+                
+                final_content = resp or "".join(direct_tokens)
+                if final_content and final_content != "null":
+                    # Robust cleanup for DB storage
+                    sanitized = self._sanitize_for_db(final_content)
+                    await self._save_assistant_message(conversation.id, sanitized)
                 return
 
             # 2. Execute with Agent
@@ -150,12 +168,60 @@ class ChatService:
                 elif event_type in ["tool_start", "tool_end", "error"]:
                     yield event
             
+            # Cleanup and save
+            final_response = final_response.strip()
             if final_response:
-                await self._save_assistant_message(conversation.id, final_response)
-                
+                sanitized = self._sanitize_for_db(final_response)
+                await self._save_assistant_message(conversation.id, sanitized)
+                    
+            yield {"type": "done"}
+            
         except Exception as e:
-            logger.error(f"Processing error: {e}", exc_info=True)
-            yield {"type": "error", "content": f"Error: {str(e)}"}
+            logger.error(f"Error in process_message: {e}", exc_info=True)
+            yield {"type": "error", "content": str(e)}
+
+    def _sanitize_for_db(self, content: str) -> str:
+        """
+        Cleans up response content before saving to the database.
+        - Unescapes literal backslash sequences (e.g. \n -> newline)
+        - Wraps raw code in triple backticks if missing
+        - Ensures it's not a JSON string
+        """
+        if not content or not isinstance(content, str):
+            return content
+
+        # 1. Unescape literal sequences (fixes the single line issue)
+        try:
+            # literal_eval or encode/decode approach
+            # Using unicode_escape to turn literal \n into real newlines
+            content = codecs.decode(content, "unicode_escape")
+        except Exception:
+            pass # Fallback to raw if decoding fails
+
+        # 2. Extract from JSON if still wrapped (extra safety)
+        content = content.strip()
+        if content.startswith('{') and '"response":' in content:
+            try:
+                data = json.loads(content)
+                content = data.get("response", content)
+            except:
+                pass
+
+        # 3. Markdown Guard: If content looks like pure code but lacks backticks
+        # e.g. "python\ndef fizzbuzz..."
+        code_identifiers = ["def ", "import ", "class ", "interface ", "function ", "const ", "let ", "var "]
+        lines = content.split('\n')
+        
+        # If any of the first few lines look like code without backticks
+        if not content.startswith('```') and any(any(ident in line for ident in code_identifiers) for line in lines[:5]):
+            # Detect language if possible (simple heuristic)
+            lang = "text"
+            if "def " in content or "import " in content: lang = "python"
+            elif "interface " in content or "export " in content: lang = "typescript"
+            
+            content = f"```{lang}\n{content}\n```"
+        
+        return content
 
     async def resume_execution(
         self,
@@ -220,9 +286,8 @@ class ChatService:
                     yield event
 
             if final_response:
-                # Append to last assistant message if we can, or simplified: just save new chunk
-                # Ideally we append to the message that was "paused"
-                await self._save_assistant_message(conversation.id, final_response)
+                sanitized = self._sanitize_for_db(final_response)
+                await self._save_assistant_message(conversation.id, sanitized)
                 
         except Exception as e:
             logger.error(f"Resume error: {e}", exc_info=True)

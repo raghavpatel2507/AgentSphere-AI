@@ -16,14 +16,98 @@ from langgraph.errors import GraphRecursionError
 
 logger = logging.getLogger(__name__)
 
-AGENT_SYSTEM_PROMPT = """YOU ARE A PROACTIVE, HIGH-EXECUTION MULTI-TOOL AGENT.
-1. **TOOL PRIORITY**: If you have been called, it's because tools are required. ALWAYS prioritize using tools over simple conversation.
-2. **SELF-HEALING**: If a tool fails (e.g., missing parameters, invalid inputs), do not give up. Search for missing metadata or try an alternative tool/approach.
-3. **AUTONOMOUS RESOLUTION**: Never ask the user for information (IDs, usernames, keys) if a listing or search tool can find it.
-4. **LOOP PROTECTION**: If you repeat the same failing tool call 3 times, stop and explain the exact technical blocker to the user.
-5. **EFFICIENCY**: Be concise. Only fetch the data you need. Do not over-scrape or over-crawl.
-6. **STRICT TOOLING**: Never say "I can't interact with external tools". You ARE the interface to those tools. Use them to fulfill the user's request.
-7. **CONTEXT AWARENESS**: You HAVE access to the history of this conversation. Use it to maintain context and answer questions about previous turns.
+# AGENT_SYSTEM_PROMPT = """YOU ARE A PROACTIVE, HIGH-EXECUTION MULTI-TOOL AGENT.
+# 1. **TOOL PRIORITY**: If you have been called, it's because tools are required. ALWAYS prioritize using tools over simple conversation.
+# 2. **SELF-HEALING**: If a tool fails (e.g., missing parameters, invalid inputs), do not give up. Search for missing metadata or try an alternative tool/approach.
+# 3. **AUTONOMOUS RESOLUTION**: Never ask the user for information (IDs, usernames, keys) if a listing or search tool can find it.
+# 4. **LOOP PROTECTION**: If you repeat the same failing tool call 3 times, stop and explain the exact technical blocker to the user.
+# 5. **EFFICIENCY**: Be concise. Only fetch the data you need. Do not over-scrape or over-crawl.
+# 6. **STRICT TOOLING**: Never say "I can't interact with external tools". You ARE the interface to those tools. Use them to fulfill the user's request.
+# 7. **CONTEXT AWARENESS**: You HAVE access to the history of this conversation. Use it to maintain context and answer questions about previous turns.
+# """
+
+AGENT_SYSTEM_PROMPT = """YOU ARE A TOOL-GROUNDED, HALLUCINATION-SAFE AUTONOMOUS AGENT.
+
+========================
+CORE PRINCIPLES
+========================
+
+1. PARAMETER CLASSIFICATION
+Tool parameters fall into TWO categories:
+
+A) IDENTIFIERS (STRICT)
+- System-defined, opaque, exact-match values
+- Examples: chat_id, user_id, repo_id, issue_id, message_id
+- IDENTIFIERS MUST come ONLY from:
+  1. Explicit user-provided identifiers, OR
+  2. Tool responses (search/list/lookup)
+- IDENTIFIERS MUST NEVER be guessed, inferred, formatted, or defaulted
+
+B) SEMANTIC PARAMETERS (FLEXIBLE)
+- Human-language, descriptive values
+- Examples: city, country, query, topic, date, language, message text
+- SEMANTIC parameters MAY be:
+  - Inferred from user intent
+  - Normalized (e.g., "Delhi" → "New Delhi")
+  - Defaulted when reasonable
+
+Natural-language names (people, teams, projects) are NOT identifiers.
+
+========================
+EXECUTION MODEL (STRICT)
+========================
+
+PHASE 1 — INTENT
+- Understand what the user wants to achieve
+
+PHASE 2 — REQUIREMENTS
+- Identify which parameters are required
+- Classify each parameter as IDENTIFIER or SEMANTIC
+
+PHASE 3 — DISCOVERY (IDENTIFIERS ONLY)
+- If an IDENTIFIER is missing:
+  - Use available tools to search/list/lookup
+  - Extract the identifier EXACTLY as returned
+- If no tool can retrieve it:
+  - Stop and explain what is missing
+
+PHASE 4 — ACTION
+- Call action tools ONLY after all IDENTIFIERS are resolved
+- SEMANTIC parameters may be inferred or defaulted
+
+PHASE 5 — VERIFICATION
+- Claim success ONLY if the tool response explicitly confirms success
+- Never assume an action succeeded
+
+========================
+AUTONOMY RULES
+========================
+
+- If a required parameter can be discovered via tools:
+  - DO NOT ask the user for it
+- Ask the user ONLY when:
+  - No tool exists to retrieve the missing IDENTIFIER
+
+- If a semantic default or inference is used:
+  - Clearly state the assumption in the response
+
+- If a tool fails repeatedly (3 times with same issue):
+  - Stop and explain the exact technical blocker
+
+========================
+FORBIDDEN BEHAVIOR
+========================
+
+- Inventing or guessing identifiers
+- Reusing example IDs or placeholders
+- Deriving IDs from names or patterns
+- Claiming success without tool confirmation
+
+========================
+FUNDAMENTAL RULE
+========================
+
+NO IDENTIFIER → NO ACTION
 """
 
 
@@ -168,13 +252,35 @@ class Agent:
                         yield {"type": "token", "content": token.content}
                 
                 elif mode == "updates":
+                    # Check for interrupts/approval
                     action_event = self._extract_action_info(chunk)
                     if action_event:
                         yield action_event
                         return
                     
-                    # Tool start/end events (if available in updates)
-                    # Note: The exact structure depends on LangChain version
+                    # Yield tool start/end events from node updates
+                    # chunk is usually {node_name: {messages: [...]}}
+                    for node_name, data in chunk.items():
+                        if not isinstance(data, dict) or "messages" not in data:
+                            continue
+                            
+                        for msg in data["messages"]:
+                            # Tool start: AIMessage has tool_calls
+                            if isinstance(msg, AIMessage) and msg.tool_calls:
+                                for tc in msg.tool_calls:
+                                    yield {
+                                        "type": "tool_start",
+                                        "tool": tc["name"],
+                                        "inputs": tc["args"]
+                                    }
+                            
+                            # Tool end: ToolMessage has the output
+                            elif isinstance(msg, ToolMessage):
+                                yield {
+                                    "type": "tool_end",
+                                    "tool": msg.name,
+                                    "output": str(msg.content)
+                                }
                     
         except GraphRecursionError:
             logger.error("GraphRecursionError - task too complex")
@@ -223,6 +329,26 @@ class Agent:
                     if action_event:
                         yield action_event
                         return
+                        
+                    # Yield tool start/end events from node updates
+                    for node_name, data in chunk.items():
+                        if not isinstance(data, dict) or "messages" not in data:
+                            continue
+                            
+                        for msg in data["messages"]:
+                            if isinstance(msg, AIMessage) and msg.tool_calls:
+                                for tc in msg.tool_calls:
+                                    yield {
+                                        "type": "tool_start",
+                                        "tool": tc["name"],
+                                        "inputs": tc["args"]
+                                    }
+                            elif isinstance(msg, ToolMessage):
+                                yield {
+                                    "type": "tool_end",
+                                    "tool": msg.name,
+                                    "output": str(msg.content)
+                                }
                             
         except Exception as e:
             logger.error(f"Resume error: {e}", exc_info=True)

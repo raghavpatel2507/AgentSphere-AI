@@ -18,6 +18,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Get database connection and inspector
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    existing_tables = inspector.get_table_names()
+
     # Create Enums safely
     op.execute("""
     DO $$
@@ -33,65 +38,69 @@ def upgrade() -> None:
     """)
 
     # Create tenants table
-    op.create_table(
-        'tenants',
-        sa.Column('id', sa.UUID(), nullable=False),
-        sa.Column('name', sa.String(length=255), nullable=False),
-        sa.Column('api_key', sa.String(length=255), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.Column('is_active', sa.Boolean(), nullable=True),
-        sa.Column('metadata', sa.JSON(), nullable=True),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_tenants_api_key'), 'tenants', ['api_key'], unique=True)
-    op.create_index(op.f('ix_tenants_is_active'), 'tenants', ['is_active'], unique=False)
+    if 'tenants' not in existing_tables:
+        op.create_table(
+            'tenants',
+            sa.Column('id', sa.UUID(), nullable=False),
+            sa.Column('name', sa.String(length=255), nullable=False),
+            sa.Column('api_key', sa.String(length=255), nullable=False),
+            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+            sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+            sa.Column('is_active', sa.Boolean(), nullable=True),
+            sa.Column('metadata', sa.JSON(), nullable=True),
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index(op.f('ix_tenants_api_key'), 'tenants', ['api_key'], unique=True)
+        op.create_index(op.f('ix_tenants_is_active'), 'tenants', ['is_active'], unique=False)
 
     # Create tenant_configs table
-    op.create_table(
-        'tenant_configs',
-        sa.Column('id', sa.UUID(), nullable=False),
-        sa.Column('tenant_id', sa.UUID(), nullable=False),
-        sa.Column('config_key', sa.String(length=255), nullable=False),
-        sa.Column('config_value', sa.JSON(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_tenant_configs_tenant_id'), 'tenant_configs', ['tenant_id'], unique=False)
+    if 'tenant_configs' not in existing_tables:
+        op.create_table(
+            'tenant_configs',
+            sa.Column('id', sa.UUID(), nullable=False),
+            sa.Column('tenant_id', sa.UUID(), nullable=False),
+            sa.Column('config_key', sa.String(length=255), nullable=False),
+            sa.Column('config_value', sa.JSON(), nullable=False),
+            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+            sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index(op.f('ix_tenant_configs_tenant_id'), 'tenant_configs', ['tenant_id'], unique=False)
 
     # Create conversations table
-    op.create_table(
-        'conversations',
-        sa.Column('id', sa.UUID(), nullable=False),
-        sa.Column('tenant_id', sa.UUID(), nullable=False),
-        sa.Column('user_id', sa.UUID(), nullable=False),
-        sa.Column('thread_id', sa.String(), nullable=False),
-        sa.Column('title', sa.String(length=500), nullable=True),
-        sa.Column('status', sa.Enum('ACTIVE', 'ARCHIVED', 'PENDING_APPROVAL', name='conversation_status'), nullable=False, server_default='ACTIVE'),
-        sa.Column('metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_conversations_tenant_id'), 'conversations', ['tenant_id'], unique=False)
-    op.create_index(op.f('ix_conversations_thread_id'), 'conversations', ['thread_id'], unique=True)
-    op.create_index(op.f('ix_conversations_user_id'), 'conversations', ['user_id'], unique=False)
+    if 'conversations' not in existing_tables:
+        op.create_table(
+            'conversations',
+            sa.Column('id', sa.UUID(), nullable=False),
+            sa.Column('tenant_id', sa.UUID(), nullable=False),
+            sa.Column('user_id', sa.UUID(), nullable=False),
+            sa.Column('thread_id', sa.String(), nullable=False),
+            sa.Column('title', sa.String(length=500), nullable=True),
+            sa.Column('status', postgresql.ENUM('ACTIVE', 'ARCHIVED', 'PENDING_APPROVAL', name='conversation_status', create_type=False), nullable=False, server_default='ACTIVE'),
+            sa.Column('metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+            sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index(op.f('ix_conversations_tenant_id'), 'conversations', ['tenant_id'], unique=False)
+        op.create_index(op.f('ix_conversations_thread_id'), 'conversations', ['thread_id'], unique=True)
+        op.create_index(op.f('ix_conversations_user_id'), 'conversations', ['user_id'], unique=False)
 
     # Create messages table
-    op.create_table(
-        'messages',
-        sa.Column('id', sa.UUID(), nullable=False),
-        sa.Column('conversation_id', sa.UUID(), nullable=False),
-        sa.Column('role', sa.Enum('USER', 'ASSISTANT', 'SYSTEM', 'TOOL', name='message_role'), nullable=False),
-        sa.Column('content', sa.Text(), nullable=False),
-        sa.Column('metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.ForeignKeyConstraint(['conversation_id'], ['conversations.id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_messages_conversation_id'), 'messages', ['conversation_id'], unique=False)
+    if 'messages' not in existing_tables:
+        op.create_table(
+            'messages',
+            sa.Column('id', sa.UUID(), nullable=False),
+            sa.Column('conversation_id', sa.UUID(), nullable=False),
+            sa.Column('role', postgresql.ENUM('USER', 'ASSISTANT', 'SYSTEM', 'TOOL', name='message_role', create_type=False), nullable=False),
+            sa.Column('content', sa.Text(), nullable=False),
+            sa.Column('metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+            sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+            sa.ForeignKeyConstraint(['conversation_id'], ['conversations.id'], ondelete='CASCADE'),
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index(op.f('ix_messages_conversation_id'), 'messages', ['conversation_id'], unique=False)
 
     # Insert default tenant
     op.execute("""

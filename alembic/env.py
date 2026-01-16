@@ -16,15 +16,15 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from backend.app.db import Base
-from backend.app.config import config
-from backend.app.models import * # Import all models for autogenerate
+from backend.app.config import config as app_config
+from backend.app.core.state.models import * # Import directly from source
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
 # Set the sqlalchemy.url from environment
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("+asyncpg", ""))
+config.set_main_option("sqlalchemy.url", app_config.DATABASE_URL.replace("+asyncpg", ""))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

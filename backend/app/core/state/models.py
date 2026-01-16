@@ -157,17 +157,21 @@ class OAuthToken(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
-    service = Column(String(50), nullable=False)
+    provider = Column(String(50), nullable=False, index=True)
     access_token = Column(Text, nullable=False)
     refresh_token = Column(Text, nullable=True)
     token_uri = Column(String(500), nullable=True)
-    scopes = Column(JSONB, default=[])
+    scope = Column(Text, nullable=True)  # Renamed from scopes, changed to Text/String
     expires_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Store full raw response for debugging/extras
+    raw = Column(JSONB, default={})
+    
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     
     __table_args__ = (
-        UniqueConstraint('user_id', 'service', name='uq_user_service'),
+        UniqueConstraint('user_id', 'provider', name='uq_user_provider'),
     )
 
     @property
@@ -178,4 +182,4 @@ class OAuthToken(Base):
         return datetime.now(timezone.utc) > self.expires_at
 
     def __repr__(self):
-        return f"<OAuthToken {self.service} for user {self.user_id}>"
+        return f"<OAuthToken {self.provider} for user {self.user_id}>"

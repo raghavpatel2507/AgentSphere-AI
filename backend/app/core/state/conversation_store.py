@@ -142,6 +142,69 @@ async def archive_conversation(conversation_id: UUID) -> None:
         await session.commit()
 
 
+async def delete_conversation(thread_id: str) -> bool:
+    """
+    Permanently delete a conversation and all its messages.
+    
+    Args:
+        thread_id: The thread ID to delete
+        
+    Returns:
+        True if deleted, False if not found
+    """
+    from sqlalchemy import delete
+    async with AsyncSessionLocal() as session:
+        # Find the conversation first
+        result = await session.execute(
+            select(Conversation).where(Conversation.thread_id == thread_id)
+        )
+        conversation = result.scalar_one_or_none()
+        
+        if not conversation:
+            return False
+            
+        # Delete messages first (though CASCADE should handle it, being explicit is safer)
+        await session.execute(
+            delete(Message).where(Message.conversation_id == conversation.id)
+        )
+        
+        # Delete conversation
+        await session.execute(
+            delete(Conversation).where(Conversation.id == conversation.id)
+        )
+        
+        await session.commit()
+        return True
+
+
+async def list_conversations(
+    tenant_id: UUID,
+    user_id: UUID,
+    limit: int = 50
+) -> List[Conversation]:
+    """
+    List all conversations for a user and tenant.
+    
+    Args:
+        tenant_id: UUID of the tenant
+        user_id: UUID of the user
+        limit: Maximum number of conversations to return
+        
+    Returns:
+        List of Conversation objects, ordered by updated_at desc
+    """
+    async with AsyncSessionLocal() as session:
+        query = (
+            select(Conversation)
+            .where(Conversation.tenant_id == tenant_id)
+            .where(Conversation.user_id == user_id)
+            .order_by(Conversation.updated_at.desc())
+            .limit(limit)
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+
 # ============================================
 # Message Operations
 # ============================================

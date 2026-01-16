@@ -25,6 +25,7 @@ class OpenAIProvider(LLMProvider):
             model_name=config.get("model", "gpt-4.1-mini"),
             temperature=config.get("temperature", 0.7),
             openai_api_key=api_key,
+            max_tokens=config.get("max_tokens"),
             max_retries=3,
             streaming=True
         )
@@ -40,6 +41,8 @@ class OpenROuterProvider(LLMProvider):
             model=config.get("model", "gpt-4o"),
             api_key=api_key,
             base_url="https://openrouter.ai/api/v1",
+            temperature=config.get("temperature", 0.7),
+            max_tokens=config.get("max_tokens"),
             max_retries=3,
             streaming=True
         )
@@ -87,6 +90,7 @@ class GroqProvider(LLMProvider):
             streaming=True
         )
 
+
 class LLMFactory:
     """Factory to create LLM instances based on configuration."""
     
@@ -121,6 +125,13 @@ class LLMFactory:
             load_dotenv(env_file, override=True)
         
         # Default configuration from environment variables
+        # Default configuration from environment variables
+        max_tokens_env = os.getenv("LLM_MAX_TOKENS")
+        max_tokens = int(max_tokens_env) if max_tokens_env else 4096
+        # Hard cap to prevent 400 errors with some providers
+        if max_tokens > 8192:
+            max_tokens = 4096
+
         config = {
             "provider": os.getenv("LLM_PROVIDER", "openai"),
             "model": os.getenv("MODEL_NAME", "gpt-4.1-mini"),

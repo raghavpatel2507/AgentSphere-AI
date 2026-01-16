@@ -231,6 +231,19 @@ async def save_history(
         if new_messages:
             logger.info(f"✅ Saved {len(new_messages)} new message(s) to database")
             
+            # Auto-name conversation if it's still "New Conversation"
+            if conversation.title == "New Conversation" or not conversation.title:
+                # Find the first human message in the entire history
+                first_user_msg = next((m for m in history if m.type == 'human'), None)
+                if first_user_msg:
+                    new_title = first_user_msg.content[:50]
+                    if len(first_user_msg.content) > 50:
+                        new_title += "..."
+                    
+                    from src.core.state.conversation_store import update_conversation_title
+                    await update_conversation_title(conversation.id, new_title)
+                    print(f"📝 Updated conversation title to: {new_title}")
+            
     except Exception as e:
         logger.error(f"⚠️ Error saving history for {thread_id}: {e}")
 

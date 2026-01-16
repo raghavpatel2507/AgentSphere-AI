@@ -4,6 +4,7 @@ Handles adding, removing, enabling/disabling MCP servers.
 """
 
 import logging
+import os
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,6 +56,10 @@ async def list_servers(
     # Get live status from manager (includes connected status and tools)
     all_status = await manager.get_all_tools_status()
     
+    # Get icons from registry for matching
+    from backend.app.core.mcp.registry import SPHERE_REGISTRY
+    registry_icons = {app.name: app.icon for app in SPHERE_REGISTRY}
+    
     # Also fetch from DB for basic info (id, timestamps)
     result = await db.execute(
         select(MCPServerConfig).where(MCPServerConfig.user_id == current_user.id)
@@ -85,6 +90,7 @@ async def list_servers(
             config=safe_config,
             disabled_tools=db_cfg.disabled_tools or [],
             tools=status_info.get("tools", []),
+            icon=registry_icons.get(db_cfg.name),
             created_at=db_cfg.created_at,
             updated_at=db_cfg.updated_at,
         ))
@@ -107,6 +113,9 @@ async def add_server(
     """
     Add a new MCP server configuration.
     """
+    logger.info(f"Adding Server Request: Name={request.name}")
+    logger.info(f"Config Payload: {request.config}")
+    
     from backend.app.core.mcp.pool import mcp_pool
     manager = await mcp_pool.get_manager(current_user.id)
     
@@ -135,20 +144,36 @@ async def add_server(
 
     # Create a temporary test session to validate config before saving
     from mcp_use.client import MCPClient
+    
+    # Set CI=true to potentially suppress interactive auth prompts in mcp-use
+    original_ci = os.environ.get("CI")
+    os.environ["CI"] = "true"
+    
     test_client = MCPClient()
     try:
+        logger.info(f"Testing connection for {request.name} with URL: {request.config.get('url')}")
         # Use request.config directly for test
         test_session = await test_client.create_session("temp_test", request.config)
+        logger.info("Test connection successful")
         # If we reach here, connection was successful
-        # We don't need to list tools, just knowing it spawns is enough
     except Exception as e:
-        logger.error(f"Failed to validate server {request.name} before adding: {e}")
+        logger.error(f"Failed to validate server {request.name} before adding: {e}", exc_info=True)
+        # Check for hints of 401/Auth
+        err_str = str(e)
+        if "401" in err_str or "Unauthorized" in err_str:
+             err_str += " (Check your URL/Token)"
+             
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to connect to server with provided config: {str(e)}"
+            detail=f"Connection Failed: {err_str}. Please verify your Zoho URL/Key."
         )
     finally:
-        # Client cleanup handled by GC or explicit close if library supports it
+        # Restore env
+        if original_ci:
+            os.environ["CI"] = original_ci
+        else:
+            os.environ.pop("CI", None)
+        # client cleanup
         pass
 
     # Success -> Persist using Manager
@@ -157,22 +182,7 @@ async def add_server(
     # Reload local cache
     await manager.initialize()
     
-    # Return response (fetch back what was saved)
-    return await list_servers(current_user, db) # Simplified response return
-    # Original route saved then returned.
-    # manager.add_server(validate=False) saves and connects.
-    # Note: request.config is decrypted here, manager will encrypt it.
-    success = await manager.save_server_config(request.name, request.config)
-    
-    if not success:
-         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to add server"
-        )
-         
-    # Fetch created to return response format
-    # Or just construct response? 
-    # Let's fetch to be safe and consistent with schemas
+    # Fetch created to return response format (singular MCPServerResponse)
     result = await db.execute(
         select(MCPServerConfig).where(
             MCPServerConfig.user_id == current_user.id,
@@ -184,12 +194,23 @@ async def add_server(
     if not server:
          raise HTTPException(status_code=500, detail="Server saved but not found")
 
+    # Get live status for connected field (optional but helpful)
+    all_status = await manager.get_all_tools_status()
+    status_info = all_status.get(server.name, {})
+
+    # Use registry icon if available
+    from backend.app.core.mcp.registry import SPHERE_REGISTRY
+    registry_icons = {app.name: app.icon for app in SPHERE_REGISTRY}
+
     return MCPServerResponse(
         id=server.id,
         name=server.name,
         enabled=server.enabled,
+        connected=status_info.get("connected", False),
         config=_mask_sensitive_config(server.config),
-        disabled_tools=[],
+        disabled_tools=server.disabled_tools or [],
+        tools=status_info.get("tools", []),
+        icon=registry_icons.get(server.name),
         created_at=server.created_at,
         updated_at=server.updated_at,
     )

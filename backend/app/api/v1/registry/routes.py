@@ -15,6 +15,12 @@ router = APIRouter(prefix="/mcp/registry", tags=["MCP Registry"])
 # Response Schemas
 # ============================================
 
+class OAuthConfigResponse(BaseModel):
+    """OAuth configuration for frontend."""
+    provider_name: str
+    pkce: bool = True
+    scopes: List[str]
+
 class AuthFieldResponse(BaseModel):
     """Auth field definition."""
     name: str
@@ -22,7 +28,6 @@ class AuthFieldResponse(BaseModel):
     description: Optional[str] = None
     type: str = "text"
     required: bool = True
-
 
 class RegistryAppResponse(BaseModel):
     """Response for a registry app."""
@@ -34,6 +39,7 @@ class RegistryAppResponse(BaseModel):
     config_template: dict
     auth_fields: List[AuthFieldResponse]
     is_custom: bool = False
+    oauth_config: Optional[OAuthConfigResponse] = None
 
 
 class RegistryListResponse(BaseModel):
@@ -79,6 +85,15 @@ async def list_registry_apps(
             if search_lower not in app.name.lower() and search_lower not in app.description.lower():
                 continue
         
+        # Prepare OAuth Config Response
+        oauth_resp = None
+        if app.oauth_config:
+            oauth_resp = OAuthConfigResponse(
+                provider_name=app.oauth_config.provider_name,
+                pkce=app.oauth_config.pkce,
+                scopes=app.oauth_config.scopes
+            )
+        
         apps.append(RegistryAppResponse(
             id=app.id,
             name=app.name,
@@ -97,6 +112,7 @@ async def list_registry_apps(
                 for f in app.auth_fields
             ],
             is_custom=app.is_custom,
+            oauth_config=oauth_resp
         ))
     
     return RegistryListResponse(
@@ -129,6 +145,15 @@ async def get_registry_app(app_id: str):
             detail=f"App '{app_id}' not found"
         )
     
+    # Prepare OAuth Config Response
+    oauth_resp = None
+    if app.oauth_config:
+        oauth_resp = OAuthConfigResponse(
+            provider_name=app.oauth_config.provider_name,
+            pkce=app.oauth_config.pkce,
+            scopes=app.oauth_config.scopes
+        )
+
     return RegistryAppResponse(
         id=app.id,
         name=app.name,
@@ -147,6 +172,7 @@ async def get_registry_app(app_id: str):
             for f in app.auth_fields
         ],
         is_custom=app.is_custom,
+        oauth_config=oauth_resp
     )
 
 

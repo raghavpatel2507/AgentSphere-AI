@@ -52,6 +52,9 @@ class MCPServerResponse(BaseModel):
     disabled_tools: List[str] = []
     created_at: datetime
     updated_at: datetime
+    icon: Optional[str] = None
+    status: Optional[str] = "Details unknown"
+    tools_count: int = 0
     
     class Config:
         from_attributes = True

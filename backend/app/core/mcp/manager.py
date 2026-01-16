@@ -14,6 +14,7 @@ import asyncio
 import logging
 import fnmatch
 from typing import Dict, List, Any, Optional
+from pathlib import Path
 
 from mcp_use.client import MCPClient
 from langchain_core.tools import StructuredTool
@@ -24,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.db import async_engine
 from backend.app.core.state.models import User, MCPServerConfig
 from backend.app.core.auth.security import decrypt_config, encrypt_config
+from backend.app.config import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -83,13 +85,26 @@ class MCPManager:
                 self._server_configs[row.name] = config
 
     async def save_server_config(self, name: str, config: Dict[str, Any]):
-        """Save server configuration to database."""
+        """
+        Save server configuration to database and update runtime state.
+        
+        Lifecycle:
+        1. Disconnects any existing active session for this server (to ensure clean state).
+        2. Persists the new configuration to the database (encrypted).
+        3. Updates the local configuration cache.
+        4. If the server is enabled, immediately initiates a new connection with the new config.
+        """
         enabled = config.pop("enabled", True)
         disabled_tools = config.pop("disabled_tools", [])
         
+        # 1. Runtime: Disconnect existing session if present
+        # This ensures we don't have a lingering session with old credentials
+        await self.disconnect_server(name)
+
         # Encrypt the entire config object
         encrypted_config = encrypt_config(config)
         
+        # 2. Persistence: Save to DB
         async with AsyncSession(async_engine) as session:
             stmt = select(MCPServerConfig).where(
                 MCPServerConfig.user_id == self.user_id,
@@ -113,10 +128,14 @@ class MCPManager:
                 ))
             await session.commit()
         
-        # Update local cache
+        # 3. Cache: Update local cache
         config["enabled"] = enabled
         config["disabled_tools"] = disabled_tools
         self._server_configs[name] = config
+
+        # 4. Runtime: Connect if enabled
+        if enabled:
+            await self._connect_single(name, config)
 
     async def toggle_server_status(self, name: str, enabled: bool) -> bool:
         """Enable or disable a server."""
@@ -137,8 +156,8 @@ class MCPManager:
                 
                 # Proactive management:
                 if enabled:
-                    # Trigger connection in background so it's ready "instantly"
-                    asyncio.create_task(self._connect_single(name, self._server_configs[name]))
+                    # Sync connection so tools are available before response
+                    await self._connect_single(name, self._server_configs[name])
                 else:
                     # Disconnect immediately if disabled
                     await self.disconnect_server(name)
@@ -146,6 +165,15 @@ class MCPManager:
                 return True
         return False
         
+    async def remove_server(self, name: str) -> bool:
+        """Fully remove a server: disconnect and delete config."""
+        if name not in self._server_configs:
+            return False
+            
+        await self.disconnect_server(name)
+        await self.delete_server_config(name)
+        return True
+
     async def delete_server_config(self, name: str):
         """Delete server from database."""
         async with AsyncSession(async_engine) as session:
@@ -194,15 +222,59 @@ class MCPManager:
                 return # Already connected
 
             # Use config directly (no environment resolution)
-            resolved_config = config
+            resolved_config = config.copy()  # Copy to avoid modifying cache
             
+            # Sanitize Auth: Remove empty auth/headers to avoid "Illegal header value"
+            if "auth" in resolved_config and not resolved_config["auth"]:
+                del resolved_config["auth"]
+
             # Windows fix
             if os.name == 'nt' and resolved_config.get("command") == "npx":
                 resolved_config["command"] = "npx.cmd"
 
+            # Runtime Environment Injection for Gmail
+            # User prefers 'auth' field in DB, but npx process needs Env Var.
+            if name == "gmail-mcp":
+                 # Import here to avoid circular dependency
+                 from backend.app.core.oauth.service import oauth_service
+                 import json
+                 
+                 # 1. Fetch full credentials
+                 creds = await oauth_service.get_full_credentials(self.user_id, "google")
+                 
+                 if creds:
+                     # 2. Writes to file
+                     # Ensure directory exists: backend/temp/tokens/{user_id}/
+                     # Using "backend/temp" instead of ".gemini" to allow easier gitignore and cleanup
+                     base_dir = PROJECT_ROOT / "backend" / "temp" / "tokens" / str(self.user_id)
+                     base_dir.mkdir(parents=True, exist_ok=True)
+                     
+                     creds_path = base_dir / "gmail_credentials.json"
+                     
+                     with open(creds_path, "w") as f:
+                         json.dump(creds, f, indent=2)
+                         
+                     logger.info(f"Generated Gmail credentials at {creds_path}")
+                     
+                     # 3. Inject Path
+                     if "env" not in resolved_config:
+                         resolved_config["env"] = {}
+                         
+                     # Support both patterns
+                     resolved_config["env"]["GMAIL_CREDENTIALS_PATH"] = str(creds_path.absolute())
+                     resolved_config["env"]["GMAIL_TOKEN"] = str(creds_path.absolute()) # In case they use this env var
+                     
+                     # Also replace "auth" if it was a placeholder waiting for a value
+                     if "auth" in resolved_config:
+                         resolved_config["auth"] = str(creds_path.absolute())
+
             # mcp-use: Register then Connect
             self._client.add_server(name, resolved_config)
             self._sessions[name] = await self._client.create_session(name)
+            
+            # Strict Cleanup: User requests immediate file deletion after connection
+            if name == "gmail-mcp":
+                 self._cleanup_temp_files()
             
             logger.info(f"✅ Connected: {name}")
         except Exception as e:
@@ -215,6 +287,30 @@ class MCPManager:
             # usually handled by removing session ref or closing client.
             # For now we just remove from our tracking.
             self._sessions.pop(name, None)
+            
+            # Cleanup temporary files (e.g. Gmail credentials)
+            if name == "gmail-mcp":
+                self._cleanup_temp_files()
+
+    def _cleanup_temp_files(self):
+        """Clean up temporary credential files."""
+        try:
+            # Reconstruct path matching _connect_single
+            base_dir = PROJECT_ROOT / "backend" / "temp" / "tokens" / str(self.user_id)
+            creds_path = base_dir / "gmail_credentials.json"
+            
+            if creds_path.exists():
+                creds_path.unlink()
+                logger.info(f"Cleaned up temporary file: {creds_path}")
+            
+            # Optional: remove token directory if empty
+            if base_dir.exists() and not any(base_dir.iterdir()):
+                try:
+                    base_dir.rmdir() 
+                except:
+                    pass
+        except Exception as e:
+            logger.warning(f"Failed to cleanup temp files: {e}")
 
     async def restart_server(self, name: str):
         """Restart a specific server connection."""

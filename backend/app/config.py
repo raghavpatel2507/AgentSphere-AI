@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Optional, List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Find project root (where .env is located)
 # Go up from backend/app/config.py -> backend/app -> backend -> project_root
@@ -46,16 +49,17 @@ class AppConfig(BaseSettings):
     GROQ_API_KEY: Optional[str] = None
     
     # CORS
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://localhost:8080"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://localhost:8085"
     
     # HITL
     HITL_REQUEST_TIMEOUT_SECONDS: int = 300
     
     # OAuth
-    GOOGLE_CLIENT_ID: Optional[str] = None
-    GOOGLE_CLIENT_SECRET: Optional[str] = None
-    ZOHO_CLIENT_ID: Optional[str] = None
-    ZOHO_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_CLIENT_ID: Optional[str] = os.getenv("GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET: Optional[str] = os.getenv("GOOGLE_CLIENT_SECRET")
+
+    GITHUB_CLIENT_ID: Optional[str] = os.getenv("GITHUB_CLIENT_ID")
+    GITHUB_CLIENT_SECRET: Optional[str] = os.getenv("GITHUB_CLIENT_SECRET")
     
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),
