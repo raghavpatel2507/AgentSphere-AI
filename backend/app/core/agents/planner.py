@@ -152,17 +152,36 @@ JSON FORMAT:
                             yielded_len = curr_idx
 
             # Final cleanup and JSON parsing
-            clean_content = full_content
+            clean_content = full_content.strip()
+            
+            # 1. Handle Markdown code blocks
             if "```json" in clean_content:
                 clean_content = clean_content.split("```json")[1].split("```")[0].strip()
             elif "```" in clean_content:
-                clean_content = clean_content.split("```")[1].split("```")[0].strip()
+                # Find the first and last triple backticks
+                parts = clean_content.split("```")
+                if len(parts) >= 3:
+                    clean_content = parts[1].strip()
+            
+            # 2. Heuristic: locate first '{' and last '}'
+            if not clean_content.startswith("{"):
+                start_idx = clean_content.find("{")
+                end_idx = clean_content.rfind("}")
+                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                    clean_content = clean_content[start_idx:end_idx+1]
             
             try:
                 plan_data = json.loads(clean_content)
                 yield plan_data
             except Exception:
-                yield {"response": full_content, "servers": []}
+                # One more try: strip common problematic chars
+                try:
+                    # Remove potential leading/trailing garbage
+                    sanitized = clean_content.strip().lstrip('`').rstrip('`').strip()
+                    plan_data = json.loads(sanitized)
+                    yield plan_data
+                except:
+                    yield {"response": full_content, "servers": []}
                 
         except Exception as e:
             logger.error(f"Planning failed: {e}")

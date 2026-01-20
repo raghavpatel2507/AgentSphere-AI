@@ -45,18 +45,33 @@ class MCPConnectionPool:
         if user_key in self._active_managers:
             entry = self._active_managers[user_key]
             entry["last_accessed"] = current_time
-            # logger.debug(f"Retrieved pool manager for {user_id}")
-            return entry["manager"]
+            manager = entry["manager"]
+            
+            # CRITICAL: Verify manager belongs to requesting user (defensive check)
+            if str(manager.user_id) != user_key:
+                logger.error(f"🚨 SECURITY VIOLATION: Manager user_id mismatch! "
+                           f"Requested user_id={user_id}, but manager has user_id={manager.user_id}")
+                raise ValueError(f"Manager user_id mismatch")
+            
+            logger.debug(f"♻️  Reusing existing MCP Manager for user_id={user_id}")
+            return manager
             
         # Create new manager
-        logger.info(f"Creating new MCP Manager for pool (User: {user_id})")
+        logger.info(f"🆕 Creating new MCP Manager for user_id={user_id}")
         manager = MCPManager(user_id)
         await manager.initialize()
+        
+        # Verify manager was created with correct user_id
+        if str(manager.user_id) != user_key:
+            logger.error(f"🚨 Manager creation failed: user_id mismatch! "
+                       f"Expected {user_id}, got {manager.user_id}")
+            raise ValueError(f"Manager created with wrong user_id")
         
         self._active_managers[user_key] = {
             "manager": manager,
             "last_accessed": current_time
         }
+        logger.info(f"✅ MCP Manager created and cached for user_id={user_id}")
         return manager
 
     async def cleanup_idle_managers(self):

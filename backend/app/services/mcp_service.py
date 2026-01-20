@@ -39,15 +39,28 @@ class MCPService:
         return []
 
     async def get_tools_for_server(self, server_name: str, config: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Get tools using session + langchain-mcp-adapters pattern."""
+        """Get tools using session + langchain-mcp-adapters pattern with user-specific tokens."""
         from mcp_use import MCPClient
         from langchain_mcp_adapters.tools import load_mcp_tools
+        from backend.app.core.mcp.token_manager import TokenManager
         
         client = None
         try:
+            # Clone config to avoid modifying original
+            config = config.copy()
+            
+            # Load OAuth token if needed
+            if "auth" in config and isinstance(config["auth"], dict):
+                if "callback_port" in config["auth"]:
+                    # This server requires OAuth - load token from database
+                    token_manager = TokenManager(self.user_id)
+                    token_data = await token_manager.get_token(server_name)
+                    if token_data and token_data.get("access_token"):
+                        config["auth"]["token"] = token_data["access_token"]
+                        logger.info(f"Loaded OAuth token for {server_name}")
+            
             # Windows compatibility for npx
             if os.name == 'nt' and config.get("command") == "npx":
-                config = config.copy()
                 config["command"] = "npx.cmd"
 
             # Create client with server config

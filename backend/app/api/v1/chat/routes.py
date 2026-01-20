@@ -101,7 +101,7 @@ async def send_message(
     
     # Auto-title
     if conversation.title == "New Conversation":
-        conversation.title = request.content[:50] + ("..." if len(request.content) > 50 else "")
+        conversation.title = request.content[:100] + ("..." if len(request.content) > 100 else "")
         await db.commit()
     
     async def generate_stream() -> AsyncGenerator[str, None]:

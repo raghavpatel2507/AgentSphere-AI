@@ -76,9 +76,24 @@ class ChatService:
             if not servers_to_use:
                 # Direct response
                 resp = plan_result.get("response", "")
+                
+                # Use escaped tokens if we have them (they are more reliable than final parse fallback)
+                content_to_save = "".join(direct_tokens) or resp
+                
+                # If content_to_save looks like raw JSON with "response" key, try to extract it
+                # as a last resort fallback for bad data
+                if isinstance(content_to_save, str) and content_to_save.strip().startswith("{"):
+                    try:
+                        maybe_json = json.loads(content_to_save)
+                        if isinstance(maybe_json, dict) and "response" in maybe_json:
+                            content_to_save = maybe_json["response"]
+                    except:
+                        pass
+                
                 if resp and not direct_tokens:
                     yield {"type": "token", "content": resp}
-                await self._save_assistant_message(conversation.id, resp or "".join(direct_tokens))
+                
+                await self._save_assistant_message(conversation.id, content_to_save)
                 return
 
             # 2. Execute with Agent

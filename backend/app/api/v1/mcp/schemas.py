@@ -74,6 +74,7 @@ class TestConnectionResponse(BaseModel):
     tools_count: Optional[int] = None
     tools: Optional[List[str]] = None
     error: Optional[str] = None
+    auth_required: bool = False
 
 
 class ToggleToolRequest(BaseModel):

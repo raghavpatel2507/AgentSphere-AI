@@ -46,7 +46,11 @@ class AppConfig(BaseSettings):
     GROQ_API_KEY: Optional[str] = None
     
     # CORS
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://localhost:8080"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://localhost:8085"
+    
+    # Environment URLs
+    APP_URL: str = "http://localhost:8085"  # Frontend URL
+    API_BASE_URL: str = "http://localhost:8000"  # Backend URL
     
     # HITL
     HITL_REQUEST_TIMEOUT_SECONDS: int = 300

@@ -419,11 +419,76 @@ async def test_server_connection(
         )
     except Exception as e:
         logger.error(f"Test connection error for {server_name}: {e}", exc_info=True)
+        error_msg = str(e)
+        auth_required = "not authenticated" in error_msg.lower() or "please click 'connect tools'" in error_msg.lower()
+        
         return TestConnectionResponse(
             success=False,
-            message=f"Failed to connect to '{server_name}': {str(e)}",
-            error=str(e),
+            message=f"Failed to connect to '{server_name}': {error_msg}",
+            error=error_msg,
+            auth_required=auth_required
         )
 
 
+# Google Services OAuth endpoints
+@router.post("/{server_name}/google-auth", response_model=MessageResponse)
+async def start_google_oauth(
+    server_name: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Start OAuth flow for Google services (Gmail, GDrive).
+    Opens browser for authentication and saves tokens to database.
+    """
+    if server_name not in ["gmail-mcp", "google-drive", "google-calendar"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This endpoint is only for Google MCP servers (gmail-mcp, google-drive, google-calendar)"
+        )
+    
+    from backend.app.core.mcp.registry import get_app_by_id
+    app_config = get_app_by_id(server_name)
+    
+    if not app_config or "custom_oauth" not in app_config.config_template:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"{server_name} OAuth configuration not found in registry"
+        )
+    
+    oauth_config = app_config.config_template["custom_oauth"]
+    
+    try:
+        from backend.app.core.mcp.google_oauth import GoogleOAuthHandler
+        
+        handler = GoogleOAuthHandler(
+            user_id=str(current_user.id),
+            service_name=server_name,
+            client_id=oauth_config["client_id"],
+            client_secret=oauth_config["client_secret"],
+            callback_port=oauth_config.get("callback_port", 8085),
+            scopes=oauth_config.get("scopes")
+        )
+        
+        logger.info(f"Starting {server_name} OAuth flow for user {current_user.id}")
+        await handler.authenticate(timeout=300)
+        
+        return MessageResponse(message=f"{app_config.name} authenticated successfully! You can now connect tools.")
+        
+    except Exception as e:
+        logger.error(f"{server_name} OAuth failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"{app_config.name} authentication failed: {str(e)}"
+        )
+
+
+# Backward compatibility or specific endpoint if needed
+@router.post("/{server_name}/gmail-auth", response_model=MessageResponse)
+async def start_gmail_oauth(
+    server_name: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    return await start_google_oauth(server_name, current_user, db)
 
