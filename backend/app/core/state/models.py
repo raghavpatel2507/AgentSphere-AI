@@ -152,16 +152,18 @@ class MCPServerConfig(Base):
 class OAuthToken(Base):
     """
     Stores OAuth tokens for MCP services that require OAuth authentication.
+    Now uses app_id for per-app token storage (e.g., gmail-mcp, google-drive).
     """
     __tablename__ = "oauth_tokens"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
-    provider = Column(String(50), nullable=False, index=True)
+    app_id = Column(String(100), nullable=True, index=True)  # e.g., "gmail-mcp", "google-drive"
+    provider = Column(String(50), nullable=False, index=True)  # e.g., "google", "github" - kept for reference
     access_token = Column(Text, nullable=False)
     refresh_token = Column(Text, nullable=True)
     token_uri = Column(String(500), nullable=True)
-    scope = Column(Text, nullable=True)  # Renamed from scopes, changed to Text/String
+    scope = Column(Text, nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     
     # Store full raw response for debugging/extras
@@ -171,7 +173,7 @@ class OAuthToken(Base):
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     
     __table_args__ = (
-        UniqueConstraint('user_id', 'provider', name='uq_user_provider'),
+        UniqueConstraint('user_id', 'app_id', name='uq_user_app'),
     )
 
     @property
@@ -182,4 +184,5 @@ class OAuthToken(Base):
         return datetime.now(timezone.utc) > self.expires_at
 
     def __repr__(self):
-        return f"<OAuthToken {self.provider} for user {self.user_id}>"
+        return f"<OAuthToken {self.app_id or self.provider} for user {self.user_id}>"
+

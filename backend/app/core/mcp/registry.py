@@ -8,15 +8,28 @@ class AuthField(BaseModel):
     type: str = "text"  # text, password, etc.
     required: bool = True
 
+class CredentialFileDefinition(BaseModel):
+    """Defines a temporary file that needs to be generated before connecting to a server."""
+    filename: str
+    content_template: Any # Dict or "__FULL_CREDS__"
+    env_vars: List[str] = []
+    inject_as_auth: bool = False
+
 class OAuthConfig(BaseModel):
     provider_name: str # e.g. "google", "github"
     authorize_url: str
     token_url: str
     scopes: List[str]
-    client_id_env: str
-    client_secret_env: str
+    client_id_env: Optional[str] = None
+    client_secret_env: Optional[str] = None
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
     pkce: bool = True
     userinfo_url: Optional[str] = None
+    discovery_url: Optional[str] = None # Base URL for discovery (e.g. https://mcp.atlassian.com)
+    extra_auth_params: Dict[str, str] = {} # Extra params for authorize URL (e.g. audience)
+    credential_files: List[CredentialFileDefinition] = []
+    token_metadata_map: Dict[str, str] = {} # Map ${VAR} to token metadata key
 
 class SphereApp(BaseModel):
     id: str
@@ -27,6 +40,7 @@ class SphereApp(BaseModel):
     config_template: Dict[str, Any]
     auth_fields: List[AuthField] = []
     is_custom: bool = False
+    is_primary: bool = False # If multiple apps exist for a provider, which one is default?
     oauth_config: Optional[OAuthConfig] = None
 
 # Initial Registry based on common MCP servers
@@ -81,7 +95,8 @@ SPHERE_REGISTRY: List[SphereApp] = [
             client_id_env="GITHUB_CLIENT_ID",
             client_secret_env="GITHUB_CLIENT_SECRET",
             pkce=False
-        )
+        ),
+        is_primary=True
     ),
     SphereApp(
         id="exa",
@@ -239,13 +254,88 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="google-calendar",
         name="Google Calendar",
         description="Google Calendar integration for managing events and appointments.",
-        icon="https://cdn.brandfetch.io/google.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idMX2_OMSc.svg?c=1bxid64Mup7aczewSAYMX&t=1755572706253",
         category="Calendar",
         config_template={
             "command": "npx",
             "args": ["-y", "@cocal/google-calendar-mcp"],
-            "auth": "${GOOGLE_CALENDAR_TOKEN}"
-        }
+            "env": {
+                "GOOGLE_OAUTH_CREDENTIALS": "${GOOGLE_CALENDAR_OAUTH_PATH}",
+                "GOOGLE_CALENDAR_MCP_TOKEN_PATH": "${GOOGLE_CALENDAR_TOKEN_FILE}"
+            }
+        },
+        auth_fields=[],
+        oauth_config=OAuthConfig(
+            provider_name="google",
+            authorize_url="https://accounts.google.com/o/oauth2/v2/auth",
+            token_url="https://oauth2.googleapis.com/token",
+            scopes=[
+                "https://www.googleapis.com/auth/calendar",
+                "https://www.googleapis.com/auth/calendar.events",
+                "https://www.googleapis.com/auth/calendar.readonly",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
+                "openid"
+            ],
+            client_id_env="GOOGLE_CLIENT_ID",
+            client_secret_env="GOOGLE_CLIENT_SECRET",
+            pkce=True,
+            credential_files=[
+                CredentialFileDefinition(
+                    filename="gcp-oauth.keys.json",
+                    env_vars=["GOOGLE_CALENDAR_OAUTH_PATH", "GOOGLE_OAUTH_CREDENTIALS"],
+                    content_template={
+                        "installed": {
+                            "client_id": "${client_id}",
+                            "client_secret": "${client_secret}",
+                            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                            "token_uri": "${token_uri}",
+                            "redirect_uris": ["http://localhost"]
+                        }
+                    }
+                ),
+                CredentialFileDefinition(
+                    filename="tokens.json",
+                    env_vars=["GOOGLE_CALENDAR_TOKEN_FILE", "GOOGLE_CALENDAR_MCP_TOKEN_PATH"],
+                    content_template={
+                        "access_token": "${token}",
+                        "refresh_token": "${refresh_token}",
+                        "scope": "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
+                        "token_type": "Bearer",
+                        "expiry_date": 9999999999999
+                    }
+                )
+            ]
+        )
+    ),
+    SphereApp(
+        id="atlassian",
+        name="Atlassian Rovo",
+        description="Connect to Jira, Confluence, and Compass. Search, summarize, create and update issues or pages through natural language.",
+        icon="https://cdn.brandfetch.io/atlassian.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Productivity",
+        config_template={
+            "type": "httpx", 
+            "url": "https://mcp.atlassian.com/v1/sse",
+            "auth": "${ATLASSIAN_TOKEN}"
+        },
+        auth_fields=[],
+        oauth_config=OAuthConfig(
+            provider_name="atlassian",
+            authorize_url="https://auth.atlassian.com/authorize",
+            token_url="https://auth.atlassian.com/oauth/token",
+            scopes=[
+                "read:me",
+                "read:jira-work",
+                "write:jira-work",
+                "read:confluence-content",
+                "write:confluence-content",
+                "offline_access"
+            ],
+            pkce=True,
+            discovery_url="https://mcp.atlassian.com",
+            extra_auth_params={"audience": "api.atlassian.com"}
+        )
     ),
     SphereApp(
         id="playwright-mcp",
@@ -273,12 +363,63 @@ SPHERE_REGISTRY: List[SphereApp] = [
             "command": "npx",
             "args": ["-y", "@piotr-agier/google-drive-mcp"],
             "env": {
-                "GOOGLE_DRIVE_OAUTH_CREDENTIALS": "${GOOGLE_DRIVE_OAUTH_CREDENTIALS}"
-            }
+                "GDRIVE_CREDENTIALS_PATH": "${GDRIVE_CREDENTIALS_PATH}"
+            },
+            "auth": "${GDRIVE_CREDENTIALS_PATH}"
         },
-        auth_fields=[
-            AuthField(name="GOOGLE_DRIVE_OAUTH_CREDENTIALS", label="OAuth Credentials JSON Path", type="text", description="Full path to your gmail_credential.json")
-        ]
+        auth_fields=[],
+        oauth_config=OAuthConfig(
+            provider_name="google",
+            authorize_url="https://accounts.google.com/o/oauth2/v2/auth",
+            token_url="https://oauth2.googleapis.com/token",
+            scopes=[
+                # Google Drive scopes
+                "https://www.googleapis.com/auth/drive",
+                "https://www.googleapis.com/auth/drive.file",
+                "https://www.googleapis.com/auth/drive.readonly",
+                "https://www.googleapis.com/auth/drive.metadata.readonly",
+                # Google Docs scopes
+                "https://www.googleapis.com/auth/documents",
+                "https://www.googleapis.com/auth/documents.readonly",
+                # Google Sheets scopes
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/spreadsheets.readonly",
+                # User info
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
+                "openid"
+            ],
+            client_id_env="GOOGLE_CLIENT_ID",
+            client_secret_env="GOOGLE_CLIENT_SECRET",
+            pkce=True,
+            credential_files=[
+                CredentialFileDefinition(
+                    filename="gcp-oauth.keys.json",
+                    env_vars=["GOOGLE_DRIVE_OAUTH_CREDENTIALS"],
+                    content_template={
+                        "installed": {
+                            "client_id": "${client_id}",
+                            "client_secret": "${client_secret}",
+                            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                            "token_uri": "${token_uri}"
+                        }
+                    }
+                ),
+                CredentialFileDefinition(
+                    filename="tokens.json",
+                    env_vars=["GOOGLE_DRIVE_MCP_TOKEN_PATH"],
+                    inject_as_auth=True,
+                    content_template={
+                        "type": "authorized_user",
+                        "client_id": "${client_id}",
+                        "client_secret": "${client_secret}",
+                        "refresh_token": "${refresh_token}",
+                        "access_token": "${token}",
+                        "expiry_date": 9999999999999
+                    }
+                )
+            ]
+        )
     ),
     SphereApp(
         id="pinecone-mcp",
@@ -419,8 +560,13 @@ SPHERE_REGISTRY: List[SphereApp] = [
             scopes=[],                 # Discovered from server
             client_id_env="",          # Uses Dynamic Client Registration
             client_secret_env="",
-            pkce=True
-        )
+            pkce=True,
+            token_metadata_map={
+                "ZOHO_URL": "_server_url",
+                "ZOHO_TOKEN": "access_token"
+            }
+        ),
+        is_primary=True
     ),
     SphereApp(
         id="gmail-mcp",
@@ -431,7 +577,10 @@ SPHERE_REGISTRY: List[SphereApp] = [
         config_template={
             "command": "npx",
             "args": ["-y", "@gongrzhe/server-gmail-autoauth-mcp"],
-            "auth": "${GMAIL_TOKEN}"
+            "env": {
+                "GMAIL_CREDENTIALS_PATH": "${GMAIL_TOKEN_PATH}"
+            },
+            "auth": "${GMAIL_TOKEN_PATH}"
         },
         auth_fields=[],
         oauth_config=OAuthConfig(
@@ -439,18 +588,46 @@ SPHERE_REGISTRY: List[SphereApp] = [
             authorize_url="https://accounts.google.com/o/oauth2/v2/auth",
             token_url="https://oauth2.googleapis.com/token",
             scopes=[
-                "https://www.googleapis.com/auth/drive.readonly",
-                "https://www.googleapis.com/auth/calendar.events",
                 "https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/gmail.send",
+                "https://www.googleapis.com/auth/gmail.compose",
                 "https://www.googleapis.com/auth/gmail.modify",
-                "email",
-                "profile",
+                "https://www.googleapis.com/auth/gmail.labels",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
                 "openid"
             ],
             client_id_env="GOOGLE_CLIENT_ID",
             client_secret_env="GOOGLE_CLIENT_SECRET",
-            pkce=True
-        )
+            pkce=True,
+            credential_files=[
+                CredentialFileDefinition(
+                    filename="gcp-oauth.keys.json",
+                    env_vars=["GMAIL_OAUTH_PATH", "GMAIL_CREDENTIALS_FILE"],
+                    content_template={
+                        "installed": {
+                            "client_id": "${client_id}",
+                            "client_secret": "${client_secret}",
+                            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                            "token_uri": "${token_uri}"
+                        }
+                    }
+                ),
+                CredentialFileDefinition(
+                    filename="credentials.json",
+                    env_vars=["GMAIL_CREDENTIALS_PATH", "GMAIL_TOKEN_PATH", "GMAIL_TOKEN_FILE"],
+                    inject_as_auth=True,
+                    content_template={
+                        "type": "authorized_user",
+                        "client_id": "${client_id}",
+                        "client_secret": "${client_secret}",
+                        "refresh_token": "${refresh_token}",
+                        "access_token": "${token}"
+                    }
+                )
+            ]
+        ),
+        is_primary=True
     ),
     SphereApp(
         id="brave-search",
@@ -479,3 +656,17 @@ def get_app_by_id(app_id: str) -> Optional[SphereApp]:
 
 def get_all_apps() -> List[SphereApp]:
     return SPHERE_REGISTRY
+
+def get_primary_app_for_provider(provider_name: str) -> Optional[str]:
+    """Find the default app ID for a given OAuth provider."""
+    # First look for an app marked as primary
+    for app in SPHERE_REGISTRY:
+        if app.is_primary and app.oauth_config and app.oauth_config.provider_name == provider_name:
+            return app.id
+    
+    # Fallback to any app with this provider
+    for app in SPHERE_REGISTRY:
+        if app.oauth_config and app.oauth_config.provider_name == provider_name:
+            return app.id
+            
+    return None

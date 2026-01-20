@@ -12,63 +12,35 @@ import logging
 router = APIRouter(prefix="/oauth", tags=["OAuth"])
 logger = logging.getLogger(__name__)
 
-@router.get("/zoho/login")
-async def zoho_login(
-    redirect_url: str = Query(..., description="Frontend URL to redirect back to"),
-    server_url: str = Query(..., description="Zoho MCP Server URL"),
-    user: User = Depends(get_current_user)
-):
-    """
-    Special OAuth login for Zoho with dynamic URL discovery.
-    Unlike other providers, Zoho requires a user-provided MCP server URL.
-    OAuth metadata is discovered from the server's .well-known endpoint.
-    """
-    user_id = str(user.id)
-    
-    logger.info(f"Zoho OAuth login initiated for user {user_id}")
-    logger.info(f"Server URL: {server_url}")
-    logger.info(f"Redirect URL: {redirect_url}")
-    
-    try:
-        url = await oauth_service.start_dynamic_auth(
-            user_id,
-            server_url,
-            redirect_url
-        )
-        logger.info(f"Zoho OAuth URL generated successfully")
-        return {"url": url}
-    except ValueError as e:
-        logger.error(f"Zoho OAuth ValueError: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Zoho OAuth unexpected error: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to initiate Zoho OAuth: {str(e)}")
-
 
 @router.get("/{provider}/login")
 async def login(
     provider: str,
     redirect_url: str = Query(..., description="Frontend URL to redirect back to"),
+    target_app: Optional[str] = Query(None, description="Specific MCP App ID to configure"),
+    server_url: Optional[str] = Query(None, description="Dynamic server URL (e.g. for Zoho)"),
     user: User = Depends(get_current_user)
 ):
-    # Check if provider exists
-    if not get_provider(provider):
-        raise HTTPException(status_code=404, detail="Provider not found")
-
-    # Use authenticated user ID
+    """
+    Standard OAuth login entry point.
+    If server_url is provided, it uses dynamic discovery (for Zoho etc).
+    """
     user_id = str(user.id)
-
+    
     try:
-        url = await oauth_service.start_auth(provider, user_id, redirect_url)
-        # Return as JSON so frontend can redirect window.location
-        return {"url": url} 
+        if server_url:
+            # Resolve any dynamic discovery (Zoho style)
+            url = await oauth_service.start_dynamic_auth(user_id, server_url, redirect_url, target_app)
+        else:
+            # Standard static OAuth
+            url = await oauth_service.start_auth(provider, user_id, redirect_url, target_app)
+            
+        return JSONResponse(content={"url": url})
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
+    except Exception as e:
+        logger.error(f"OAuth Login error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to initiate login")
 
 
 @router.get("/callback")
@@ -105,51 +77,34 @@ async def callback(
         final_url = f"{frontend_url}?{urlencode(query_params)}"
         return RedirectResponse(url=final_url)
 
-    # 2. Handle missing code (should generally be covered by error check above)
+    # 2. Handle missing code
     if not code:
         return JSONResponse(status_code=400, content={"error": "Missing authorization code"})
 
     try:
-        # Use exchange_code_dynamic which handles both dynamic and static OAuth
-        frontend_url, user_id, provider_name = await oauth_service.exchange_code_dynamic(code, state)
+        # 3. Exchange code for token
+        frontend_url, user_id, provider_name, target_app = await oauth_service.exchange_code_dynamic(code, state)
         
         # -------------------------------------------------------------
         # Auto-Configure MCP Server based on provider
         # -------------------------------------------------------------
-        app_id_map = {
-            "google": "gmail-mcp",
-            "github": "github",
-            "zoho": "zoho"  # Add Zoho
-        }
+        from backend.app.core.mcp.registry import get_primary_app_for_provider
         
-        target_app_id = app_id_map.get(provider_name)
+        # Prioritize target app (passed from frontend) or fallback to primary in registry
+        target_app_id = target_app if target_app else get_primary_app_for_provider(provider_name)
         
         if target_app_id:
             # Import mcp_pool to get manager for this user
             from backend.app.core.mcp.pool import mcp_pool
             manager = await mcp_pool.get_manager(user_id)
             
-            # For Zoho, we need to get the server_url from token metadata
-            if provider_name == "zoho":
-                token_metadata = await oauth_service.get_token_metadata(user_id, "zoho")
-                if token_metadata and token_metadata.get("_server_url"):
-                    # Build Zoho config with the actual URL and token
-                    zoho_config = {
-                        "type": "sse",
-                        "url": token_metadata["_server_url"],
-                        "auth": token_metadata.get("access_token")
-                    }
-                    await manager.save_server_config(target_app_id, zoho_config)
-                    logger.info(f"Auto-configured Zoho MCP for user {user_id}")
-            else:
-                # retrieve resolved config using factory for other providers
-                resolved_config = await build_mcp_config(target_app_id, user_id)
-                if resolved_config:
-                    await manager.save_server_config(target_app_id, resolved_config)
-                    logger.info(f"Auto-configured and started {target_app_id} for user {user_id}")
+            # Build configuration generically via factory
+            resolved_config = await build_mcp_config(target_app_id, user_id)
+            if resolved_config:
+                await manager.save_server_config(target_app_id, resolved_config)
+                logger.info(f"Auto-configured and started {target_app_id} for user {user_id}")
 
         # Append status=success
-        # Use urlencode to be safe
         from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
         
         # Parse frontend_url to handle existing params safely
@@ -168,16 +123,9 @@ async def callback(
         
         return RedirectResponse(url=final_url)
     except ValueError as e:
-         # If state matches, redirect with error
-         # If we can't find state data (because exchange_code popped it and failed?), we might fall back
-         # But usually exchange_code fails early.
-         # Note: exchange_code pops the state. If it fails, we don't have frontend_url easily unless we peaked...
-         # But exchange_code returns tuple.
-         
-         # Ideally we should peek state first or handle error inside.
-         # For now, simplistic JSON error if exchange fails is okay, BUT user might see black screen if it was a redirect.
-         # However, the most common error 'access_denied' is now handled above.
          return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception as e:
         logger.error(f"Callback error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return JSONResponse(status_code=500, content={"error": "Internal Server Error"})

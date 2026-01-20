@@ -22,17 +22,42 @@ AUTH_CACHE: Dict[str, Dict[str, str]] = {}
 
 class OAuthService:
 
-    async def start_auth(self, provider_name: str, user_id: str, redirect_url_frontend: str) -> str:
+    async def start_auth(self, provider_name: str, user_id: str, redirect_url_frontend: str, target_app: Optional[str] = None) -> str:
         """
         Generates the authorization URL for the given provider.
         Stores state/verifier in cache.
+        
+        If target_app is specified, uses that app's OAuth config for scopes.
+        This ensures Gmail uses Gmail scopes, Calendar uses Calendar scopes, etc.
         """
-        provider = get_provider(provider_name)
-        if not provider:
+        # If target_app is specified, get its OAuth config directly for accurate scopes
+        oauth_config = None
+        if target_app:
+            from backend.app.core.mcp.registry import get_app_by_id
+            app = get_app_by_id(target_app)
+            if app and app.oauth_config:
+                oauth_config = app.oauth_config
+                logger.info(f"Using OAuth config from target app '{target_app}' with scopes: {oauth_config.scopes}")
+        
+        # Fallback to generic provider lookup if no target app or no oauth_config
+        if not oauth_config:
+            oauth_config = get_provider(provider_name)
+        
+        if not oauth_config:
             raise ValueError(f"Provider {provider_name} not configured")
 
-        client_id = getattr(config, provider.client_id_env, None)
+        # Check for static credentials
+        client_id_var = getattr(oauth_config, "client_id_env", None)
+        static_client_id = oauth_config.client_id or (client_id_var and getattr(config, client_id_var, None))
+
+        # Dynamic Auth Delegation: If we have discovery URL but no static credentials, go dynamic
+        if getattr(oauth_config, "discovery_url", None) and not static_client_id:
+            logger.info(f"Delegating to Dynamic Auth for {provider_name} (No static creds, found discovery URL)")
+            return await self.start_dynamic_auth(user_id, oauth_config.discovery_url, redirect_url_frontend, target_app)
+
+        client_id = static_client_id
         if not client_id:
+             # Fallback check - if we expected static but failed
             raise ValueError(f"Missing configuration for {provider_name} (Client ID)")
 
         # Generate State and PKCE
@@ -42,12 +67,16 @@ class OAuthService:
             "client_id": client_id,
             "redirect_uri": f"http://localhost:8000/api/v1/oauth/callback", # TODO: Make dynamic/env based // hardocded as per user req
             "state": state,
-            "scope": " ".join(provider.scopes),
+            "scope": " ".join(oauth_config.scopes),
             "access_type": "offline", # Google specific for refresh token
             "prompt": "consent",      # Google specific
         }
+        
+        # Add provider-specific extra params (e.g. audience for Atlassian)
+        if hasattr(oauth_config, "extra_auth_params") and oauth_config.extra_auth_params:
+            extra_params.update(oauth_config.extra_auth_params)
 
-        if provider.pkce:
+        if oauth_config.pkce:
             verifier, challenge = generate_pkce()
             extra_params.update({
                 "code_challenge": challenge,
@@ -58,32 +87,40 @@ class OAuthService:
                 "verifier": verifier,
                 "provider": provider_name,
                 "user_id": str(user_id),
-                "redirect_url": redirect_url_frontend
+                "redirect_url": redirect_url_frontend,
+                "target_app": target_app
             }
         else:
              AUTH_CACHE[state] = {
                 "provider": provider_name,
                 "user_id": str(user_id),
-                "redirect_url": redirect_url_frontend
+                "redirect_url": redirect_url_frontend,
+                "target_app": target_app
             }
 
         # Build URL
         from urllib.parse import urlencode
-        return f"{provider.authorize_url}?{urlencode(extra_params)}"
+        return f"{oauth_config.authorize_url}?{urlencode(extra_params)}"
 
-    async def exchange_code(self, code: str, state: str) -> Tuple[str, str, str]:
+    async def exchange_code(self, code: str, state: str) -> Tuple[str, str, str, Optional[str]]:
         """
         Exchanges code for token.
         Saves token to DB.
-        Returns (frontend_url, user_id, provider_name).
+        Returns (frontend_url, user_id, provider_name, target_app).
         """
         cache_data = AUTH_CACHE.pop(state, None)
         if not cache_data:
             raise ValueError("Invalid or expired state")
+            
+        # Dynamic Exchange Delegation
+        if cache_data.get("is_dynamic"):
+            AUTH_CACHE[state] = cache_data # Put back for dynamic handler
+            return await self.exchange_code_dynamic(code, state)
 
         provider_name = cache_data["provider"]
         user_id = cache_data["user_id"]
         frontend_url = cache_data["redirect_url"]
+        target_app = cache_data.get("target_app")
         verifier = cache_data.get("verifier")
 
         provider = get_provider(provider_name)
@@ -108,10 +145,10 @@ class OAuthService:
             resp.raise_for_status()
             token_data = resp.json()
 
-        # Save to DB
-        await self._save_token(user_id, provider_name, token_data)
+        # Save to DB - use target_app as app_id for per-app token storage
+        await self._save_token(user_id, provider_name, token_data, app_id=target_app)
 
-        return frontend_url, user_id, provider_name
+        return frontend_url, user_id, provider_name, target_app
 
     def get_state_data(self, state: str) -> Optional[Dict[str, str]]:
         """
@@ -120,8 +157,8 @@ class OAuthService:
         """
         return AUTH_CACHE.pop(state, None)
 
-    async def _save_token(self, user_id: str, provider: str, data: Dict[str, Any]):
-        """Upsert token in DB."""
+    async def _save_token(self, user_id: str, provider: str, data: Dict[str, Any], app_id: Optional[str] = None):
+        """Upsert token in DB using app_id for per-app storage."""
         access_token = data.get("access_token")
         refresh_token = data.get("refresh_token")
         expires_in = data.get("expires_in", 3600)
@@ -129,11 +166,19 @@ class OAuthService:
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
         async with AsyncSessionLocal() as session:
-            # Check existing
-            stmt = select(OAuthToken).where(
-                OAuthToken.user_id == user_id,
-                OAuthToken.provider == provider
-            )
+            # Check existing by app_id (or provider if app_id not provided for backward compat)
+            if app_id:
+                stmt = select(OAuthToken).where(
+                    OAuthToken.user_id == user_id,
+                    OAuthToken.app_id == app_id
+                )
+            else:
+                # Legacy fallback - lookup by provider
+                stmt = select(OAuthToken).where(
+                    OAuthToken.user_id == user_id,
+                    OAuthToken.provider == provider,
+                    OAuthToken.app_id == None
+                )
             result = await session.execute(stmt)
             existing = result.scalar_one_or_none()
 
@@ -144,9 +189,13 @@ class OAuthService:
                 existing.expires_at = expires_at
                 existing.raw = data
                 existing.updated_at = datetime.now(timezone.utc)
+                # Update app_id if it was missing
+                if app_id and not existing.app_id:
+                    existing.app_id = app_id
             else:
                 new_token = OAuthToken(
                     user_id=user_id,
+                    app_id=app_id,
                     provider=provider,
                     access_token=access_token,
                     refresh_token=refresh_token,
@@ -157,15 +206,16 @@ class OAuthService:
                 session.add(new_token)
             
             await session.commit()
+            logger.info(f"Saved OAuth token for user {user_id}, app_id={app_id}, provider={provider}")
             
-    async def get_valid_token(self, user_id: str, provider_name: str) -> Optional[str]:
+    async def get_valid_token(self, user_id: str, app_id: str) -> Optional[str]:
         """
-        Get a valid access token. Refresh if expired.
+        Get a valid access token by app_id. Refresh if expired.
         """
         async with AsyncSessionLocal() as session:
             stmt = select(OAuthToken).where(
                 OAuthToken.user_id == user_id,
-                OAuthToken.provider == provider_name
+                OAuthToken.app_id == app_id
             )
             token = (await session.execute(stmt)).scalar_one_or_none()
             
@@ -173,29 +223,44 @@ class OAuthService:
                 return None
                 
             if token.is_expired:
-                logger.info(f"Token for {provider_name} expired. Refreshing...")
+                logger.info(f"Token for {app_id} expired. Refreshing...")
                 return await self.refresh_token(token, session)
                 
             return token.access_token
 
-    async def get_full_credentials(self, user_id: str, provider_name: str) -> Optional[Dict[str, Any]]:
+    async def get_full_credentials(self, user_id: str, app_id: str) -> Optional[Dict[str, Any]]:
         """
         Get full credentials (access + refresh + client details) for file-based auth.
         Used for servers like Gmail that expect a credentials.json file.
+        Now looks up by app_id for per-app token storage.
         """
         async with AsyncSessionLocal() as session:
             stmt = select(OAuthToken).where(
                 OAuthToken.user_id == user_id,
-                OAuthToken.provider == provider_name
+                OAuthToken.app_id == app_id
             )
             token = (await session.execute(stmt)).scalar_one_or_none()
             
             if not token:
                 return None
+            
+            # Get provider config from the app's oauth_config
+            from backend.app.core.mcp.registry import get_app_by_id
+            app = get_app_by_id(app_id)
+            if not app or not app.oauth_config:
+                logger.warning(f"No OAuth config found for app {app_id}")
+                return None
                 
-            provider = get_provider(provider_name)
-            client_id = getattr(config, provider.client_id_env)
-            client_secret = getattr(config, provider.client_secret_env)
+            client_id = app.oauth_config.client_id or getattr(config, app.oauth_config.client_id_env)
+            client_secret = app.oauth_config.client_secret or getattr(config, app.oauth_config.client_secret_env)
+            
+            # Check for Dynamic Credentials in token.raw
+            if token.raw:
+                 # Standardize keys from dynamic exchange
+                 if "_client_id" in token.raw:
+                     client_id = token.raw["_client_id"]
+                 if "_client_secret" in token.raw:
+                     client_secret = token.raw["_client_secret"]
             
             # Ensure valid token
             if token.is_expired:
@@ -204,10 +269,10 @@ class OAuthService:
             return {
                 "token": token.access_token,
                 "refresh_token": token.refresh_token,
-                "token_uri": provider.token_url,
+                "token_uri": app.oauth_config.token_url,
                 "client_id": client_id,
                 "client_secret": client_secret,
-                "scopes": provider.scopes,
+                "scopes": app.oauth_config.scopes,
                 "expiry": token.expires_at.isoformat() if token.expires_at else None
             }
 
@@ -217,9 +282,19 @@ class OAuthService:
             logger.warning(f"No refresh token for {token.provider}")
             return None
             
-        provider = get_provider(token.provider)
-        client_id = getattr(config, provider.client_id_env)
-        client_secret = getattr(config, provider.client_secret_env)
+        # Try to resolve config by app_id first
+        provider_config = None
+        if hasattr(token, 'app_id') and token.app_id:
+            from backend.app.core.mcp.registry import get_app_by_id
+            app = get_app_by_id(token.app_id)
+            if app and app.oauth_config:
+                provider_config = app.oauth_config
+
+        if not provider_config:
+            provider_config = get_provider(token.provider)
+            
+        client_id = provider_config.client_id or getattr(config, provider_config.client_id_env)
+        client_secret = provider_config.client_secret or getattr(config, provider_config.client_secret_env)
         
         data = {
             "grant_type": "refresh_token",
@@ -230,7 +305,7 @@ class OAuthService:
         
         try:
             async with httpx.AsyncClient() as client:
-                resp = await client.post(provider.token_url, data=data)
+                resp = await client.post(provider_config.token_url, data=data)
                 resp.raise_for_status()
                 new_data = resp.json()
                 
@@ -344,7 +419,8 @@ class OAuthService:
         self, 
         user_id: str, 
         server_url: str, 
-        redirect_url_frontend: str
+        redirect_url_frontend: str,
+        target_app: Optional[str] = None
     ) -> str:
         """
         Start OAuth flow for a server with dynamic metadata discovery.
@@ -367,15 +443,24 @@ class OAuthService:
             if has_key:
                 logger.info(f"OAuth discovery failed but found 'key' in URL. Falling back to Manual Auth for {server_url}")
                 
-                # Generate a bypass state
-                state = secrets.token_urlsafe(32)
-                
+                # Determine provider name generically
+                provider_name = "dynamic_oauth" # Default fallback
+                if target_app:
+                    from backend.app.core.mcp.registry import get_app_by_id
+                    app = get_app_by_id(target_app)
+                    if app and app.oauth_config:
+                        provider_name = app.oauth_config.provider_name
+                elif server_url:
+                     from urllib.parse import urlparse
+                     provider_name = urlparse(server_url).netloc
+
                 # Store data for callback bypass
                 AUTH_CACHE[state] = {
-                    "provider": "zoho",
+                    "provider": provider_name,
                     "user_id": str(user_id),
                     "redirect_url": redirect_url_frontend,
                     "server_url": server_url,
+                    "target_app": target_app,
                     "is_dynamic": True,
                     "is_bypass": True  # Flag for manual auth bypass
                 }
@@ -432,13 +517,25 @@ class OAuthService:
         verifier, challenge = generate_pkce()
         state = secrets.token_urlsafe(32)
         
+        # Determine provider name generically
+        provider_name = "dynamic_oauth" # Default fallback
+        if target_app:
+            from backend.app.core.mcp.registry import get_app_by_id
+            app = get_app_by_id(target_app)
+            if app and app.oauth_config:
+                provider_name = app.oauth_config.provider_name
+        elif server_url:
+             from urllib.parse import urlparse
+             provider_name = urlparse(server_url).netloc
+
         # 4. Store all necessary data in cache for callback
         AUTH_CACHE[state] = {
             "verifier": verifier,
-            "provider": "zoho",  # Use "zoho" as provider name for dynamic providers
+            "provider": provider_name,
             "user_id": str(user_id),
             "redirect_url": redirect_url_frontend,
             "server_url": server_url,
+            "target_app": target_app,
             "token_url": token_url,
             "client_id": client_id,
             "client_secret": client_secret,
@@ -455,9 +552,22 @@ class OAuthService:
             "code_challenge_method": "S256"
         }
         
-        # Add scope if available
-        if scopes_supported:
-            params["scope"] = " ".join(scopes_supported[:5])
+        # Add scope from App Config if available
+        scope_str = ""
+        if target_app:
+             from backend.app.core.mcp.registry import get_app_by_id
+             app_def = get_app_by_id(target_app)
+             if app_def and app_def.oauth_config and app_def.oauth_config.scopes:
+                 scope_str = " ".join(app_def.oauth_config.scopes)
+                 # Also add extra params
+                 if app_def.oauth_config.extra_auth_params:
+                     params.update(app_def.oauth_config.extra_auth_params)
+
+        if not scope_str and scopes_supported:
+            scope_str = " ".join(scopes_supported[:5])
+            
+        if scope_str:
+            params["scope"] = scope_str
         
         from urllib.parse import urlencode
         auth_url = f"{authorize_url}?{urlencode(params)}"
@@ -465,10 +575,10 @@ class OAuthService:
         logger.info(f"Generated dynamic OAuth URL for {server_url}")
         return auth_url
 
-    async def exchange_code_dynamic(self, code: str, state: str) -> Tuple[str, str, str]:
+    async def exchange_code_dynamic(self, code: str, state: str) -> Tuple[str, str, str, Optional[str]]:
         """
         Exchange authorization code for tokens (for dynamic OAuth providers).
-        Returns (frontend_url, user_id, provider_name).
+        Returns (frontend_url, user_id, provider_name, target_app).
         """
         cache_data = AUTH_CACHE.pop(state, None)
         if not cache_data:
@@ -483,6 +593,7 @@ class OAuthService:
         user_id = cache_data["user_id"]
         frontend_url = cache_data["redirect_url"]
         server_url = cache_data["server_url"]
+        target_app = cache_data.get("target_app")
         
         # Handle BYPASS for manual auth
         if code == "BYPASS_MANUAL_AUTH" and cache_data.get("is_bypass"):
@@ -496,8 +607,8 @@ class OAuthService:
                 "_server_url": server_url,
                 "_bypass": True
             }
-            await self._save_token(user_id, "zoho", token_data)
-            return frontend_url, user_id, "zoho"
+            await self._save_token(user_id, cache_data.get("provider", "dynamic_oauth"), token_data, app_id=target_app)
+            return frontend_url, user_id, cache_data.get("provider", "dynamic_oauth"), target_app
 
         # Dynamic OAuth exchange
         verifier = cache_data.get("verifier")
@@ -537,11 +648,12 @@ class OAuthService:
         token_data["_client_id"] = client_id
         token_data["_client_secret"] = client_secret
         
-        # Save to DB under "zoho" provider
-        await self._save_token(user_id, "zoho", token_data)
+        # Save to DB with target_app as app_id for per-app storage
+        provider_name = cache_data.get("provider", "dynamic_oauth")
+        await self._save_token(user_id, provider_name, token_data, app_id=target_app)
         
-        logger.info(f"Dynamic OAuth successful for user {user_id}")
-        return frontend_url, user_id, "zoho"
+        logger.info(f"Dynamic OAuth successful for user {user_id}, app_id={target_app}")
+        return frontend_url, user_id, provider_name, target_app
 
     async def _save_dcr_credentials(self, server_url: str, client_id: str, client_secret: Optional[str]):
         """Store DCR credentials for a server URL."""
@@ -582,12 +694,12 @@ class OAuthService:
         
         return None
 
-    async def get_token_metadata(self, user_id: str, provider_name: str) -> Optional[Dict[str, Any]]:
-        """Get raw token metadata (including custom fields like _server_url)."""
+    async def get_token_metadata(self, user_id: str, app_id: str) -> Optional[Dict[str, Any]]:
+        """Get raw token metadata (including custom fields like _server_url) by app_id."""
         async with AsyncSessionLocal() as session:
             stmt = select(OAuthToken).where(
                 OAuthToken.user_id == user_id,
-                OAuthToken.provider == provider_name
+                OAuthToken.app_id == app_id
             )
             token = (await session.execute(stmt)).scalar_one_or_none()
             

@@ -12,6 +12,8 @@ Refactored to remove redundant layers and confusing implementations.
 import os
 import asyncio
 import logging
+import json
+import shutil
 import fnmatch
 from typing import Dict, List, Any, Optional
 from pathlib import Path
@@ -135,7 +137,14 @@ class MCPManager:
 
         # 4. Runtime: Connect if enabled
         if enabled:
-            await self._connect_single(name, config)
+            try:
+                import asyncio
+                # Set a timeout so we don't hang the whole callback if mcp-use stalls
+                await asyncio.wait_for(self._connect_single(name, config), timeout=15.0)
+            except asyncio.TimeoutError:
+                logger.error(f"⌛ Connection timeout for {name} during auto-config")
+            except Exception as e:
+                logger.error(f"❌ Failed to connect to {name} during auto-config: {e}")
 
     async def toggle_server_status(self, name: str, enabled: bool) -> bool:
         """Enable or disable a server."""
@@ -232,85 +241,143 @@ class MCPManager:
             if os.name == 'nt' and resolved_config.get("command") == "npx":
                 resolved_config["command"] = "npx.cmd"
 
-            # Runtime Environment Injection for Gmail
-            # User prefers 'auth' field in DB, but npx process needs Env Var.
-            if name == "gmail-mcp":
-                 # Import here to avoid circular dependency
-                 from backend.app.core.oauth.service import oauth_service
-                 import json
-                 
-                 # 1. Fetch full credentials
-                 creds = await oauth_service.get_full_credentials(self.user_id, "google")
-                 
-                 if creds:
-                     # 2. Writes to file
-                     # Ensure directory exists: backend/temp/tokens/{user_id}/
-                     # Using "backend/temp" instead of ".gemini" to allow easier gitignore and cleanup
-                     base_dir = PROJECT_ROOT / "backend" / "temp" / "tokens" / str(self.user_id)
-                     base_dir.mkdir(parents=True, exist_ok=True)
-                     
-                     creds_path = base_dir / "gmail_credentials.json"
-                     
-                     with open(creds_path, "w") as f:
-                         json.dump(creds, f, indent=2)
-                         
-                     logger.info(f"Generated Gmail credentials at {creds_path}")
-                     
-                     # 3. Inject Path
-                     if "env" not in resolved_config:
-                         resolved_config["env"] = {}
-                         
-                     # Support both patterns
-                     resolved_config["env"]["GMAIL_CREDENTIALS_PATH"] = str(creds_path.absolute())
-                     resolved_config["env"]["GMAIL_TOKEN"] = str(creds_path.absolute()) # In case they use this env var
-                     
-                     # Also replace "auth" if it was a placeholder waiting for a value
-                     if "auth" in resolved_config:
-                         resolved_config["auth"] = str(creds_path.absolute())
+            # ------------------------------------------------------------------
+            # Generic OAuth Credential Injection
+            # ------------------------------------------------------------------
+            from backend.app.core.mcp.registry import get_app_by_id
+            app = get_app_by_id(name)
+            if app and app.oauth_config and app.oauth_config.credential_files:
+                await self._prepare_oauth_credentials(app, resolved_config, name)
+
+            # ------------------------------------------------------------------
+            # Home Spoofing: Force MCP to look in our temp dir for config/tokens
+            # ------------------------------------------------------------------
+            temp_home = PROJECT_ROOT / "backend" / "temp" / "tokens" / str(self.user_id) / name
+            temp_home.mkdir(parents=True, exist_ok=True)
+            
+            if "env" not in resolved_config:
+                resolved_config["env"] = {}
+            
+            # Point common home variables to our server-specific temp dir
+            # Note: We STOPPED overriding APPDATA/LOCALAPPDATA to preserve the global NPM cache.
+            resolved_config["env"]["HOME"] = str(temp_home.absolute())
+            resolved_config["env"]["USERPROFILE"] = str(temp_home.absolute())
 
             # mcp-use: Register then Connect
+            logger.info(f"Adding server to mcp-use: {name} with config: {json.dumps(resolved_config, default=str)}")
             self._client.add_server(name, resolved_config)
+            
+            logger.info(f"Creating session for {name}...")
             self._sessions[name] = await self._client.create_session(name)
             
-            # Strict Cleanup: User requests immediate file deletion after connection
-            if name == "gmail-mcp":
-                 self._cleanup_temp_files()
+            # Post-connect cleanup of temp files
+            if app and app.oauth_config and app.oauth_config.credential_files:
+                 self._cleanup_temp_files(app, name)
             
             logger.info(f"✅ Connected: {name}")
         except Exception as e:
             logger.error(f"❌ Connection failed for {name}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    async def _prepare_oauth_credentials(self, app: Any, resolved_config: Dict, server_name: str):
+        """Generates temporary credential files based on app registry definitions."""
+        from backend.app.core.oauth.service import oauth_service
+        
+        # 1. Fetch credentials using app.id for per-app token storage
+        creds = await oauth_service.get_full_credentials(self.user_id, app.id)
+        if not creds:
+            logger.warning(f"No OAuth credentials found for app {app.id}")
+            return
+
+        # 2. Prepare Directory: Isolated by server_name
+        base_dir = PROJECT_ROOT / "backend" / "temp" / "tokens" / str(self.user_id) / server_name
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+        # 3. Process File Definitions
+        for file_def in app.oauth_config.credential_files:
+            # Handle subdirectories within tokens dir
+            file_path = base_dir / file_def.filename
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Build Content
+            if file_def.content_template == "__FULL_CREDS__":
+                content = creds
+            else:
+                # Recursive string substitution in dict
+                def substitute(val):
+                    if isinstance(val, str):
+                        # Special case: Entire value is a single placeholder "${key}"
+                        # This allows returning objects (lists/dicts) directly
+                        if val.startswith("${") and val.endswith("}") and val.count("${") == 1:
+                            key = val[2:-1]
+                            if key in creds:
+                                return creds[key]
+                        
+                        # General case: Partial string substitution
+                        for k, v in creds.items():
+                            placeholder = f"${{{k}}}"
+                            if placeholder in val:
+                                val = val.replace(placeholder, str(v))
+                        return val
+                    elif isinstance(val, dict):
+                        return {k: substitute(v) for k, v in val.items()}
+                    elif isinstance(val, list):
+                        return [substitute(item) for item in val]
+                    return val
+                
+                content = substitute(file_def.content_template)
+
+            # Write File
+            with open(file_path, "w") as f:
+                json.dump(content, f, indent=2)
+            
+            logger.info(f"Generated temp credential file for {server_name} ({app.id}): {file_path}")
+
+            # 4. Inject into Config
+            if "env" not in resolved_config:
+                resolved_config["env"] = {}
+            
+            for env_var in file_def.env_vars:
+                # Use forward slashes for paths to be safe with Node/JS on Windows
+                path_str = str(file_path.absolute()).replace("\\", "/")
+                resolved_config["env"][env_var] = path_str
+            
+            if file_def.inject_as_auth:
+                resolved_config["auth"] = str(file_path.absolute()).replace("\\", "/")
 
     async def disconnect_server(self, name: str):
         """Disconnect active session."""
         if name in self._sessions:
-            # mcp-use doesn't expose strict per-session disconnect, 
-            # usually handled by removing session ref or closing client.
-            # For now we just remove from our tracking.
             self._sessions.pop(name, None)
             
-            # Cleanup temporary files (e.g. Gmail credentials)
-            if name == "gmail-mcp":
-                self._cleanup_temp_files()
+            # Cleanup temporary files
+            from backend.app.core.mcp.registry import get_app_by_id
+            app = get_app_by_id(name)
+            if app:
+                self._cleanup_temp_files(app, name)
 
-    def _cleanup_temp_files(self):
-        """Clean up temporary credential files."""
+    def _cleanup_temp_files(self, app: Any, server_name: str):
+        """Clean up temporary credential files and any NPM/Node junk."""
         try:
-            # Reconstruct path matching _connect_single
-            base_dir = PROJECT_ROOT / "backend" / "temp" / "tokens" / str(self.user_id)
-            creds_path = base_dir / "gmail_credentials.json"
+            if not app.oauth_config or not app.oauth_config.credential_files:
+                return
+
+            # Completely remove the isolated server directory
+            base_dir = PROJECT_ROOT / "backend" / "temp" / "tokens" / str(self.user_id) / server_name
+            if base_dir.exists():
+                # shutil.rmtree(base_dir, ignore_errors=True)
+                logger.info(f"Skipped cleanup of isolated temp directory for {server_name}: {base_dir}")
             
-            if creds_path.exists():
-                creds_path.unlink()
-                logger.info(f"Cleaned up temporary file: {creds_path}")
-            
-            # Optional: remove token directory if empty
-            if base_dir.exists() and not any(base_dir.iterdir()):
+            # Optional: remove user directory if empty
+            user_dir = base_dir.parent
+            if user_dir.exists() and not any(user_dir.iterdir()):
                 try:
-                    base_dir.rmdir() 
+                    user_dir.rmdir() 
                 except:
                     pass
         except Exception as e:
-            logger.warning(f"Failed to cleanup temp files: {e}")
+            logger.warning(f"Failed to cleanup temp files for {server_name}: {e}")
 
     async def restart_server(self, name: str):
         """Restart a specific server connection."""
