@@ -248,23 +248,42 @@ class MCPManager:
             app = get_app_by_id(name)
             if app and app.oauth_config and app.oauth_config.credential_files:
                 await self._prepare_oauth_credentials(app, resolved_config, name)
+            
+            # ------------------------------------------------------------------
+            # Direct Token Injection (e.g. Atlassian, GitHub)
+            # Inject fresh OAuth tokens directly into 'auth' config for non-file apps
+            # ------------------------------------------------------------------
+            elif app and app.oauth_config and not app.oauth_config.credential_files:
+                tmpl_auth = app.config_template.get("auth")
+                if isinstance(tmpl_auth, str) and "${" in tmpl_auth:
+                     from backend.app.core.oauth.service import oauth_service
+                     creds = await oauth_service.get_full_credentials(self.user_id, app.id)
+                     if creds and creds.get("token"):
+                        resolved_config["auth"] = creds["token"]
+                        logger.debug(f"Refreshed and injected direct OAuth token for {name}")
 
             # ------------------------------------------------------------------
-            # Home Spoofing: Force MCP to look in our temp dir for config/tokens
+            # Home/Env Spoofing
+            # Only required for apps that use file-based credentials
             # ------------------------------------------------------------------
-            temp_home = PROJECT_ROOT / "backend" / "temp" / "tokens" / str(self.user_id) / name
-            temp_home.mkdir(parents=True, exist_ok=True)
-            
-            if "env" not in resolved_config:
-                resolved_config["env"] = {}
-            
-            # Point common home variables to our server-specific temp dir
-            # Note: We STOPPED overriding APPDATA/LOCALAPPDATA to preserve the global NPM cache.
-            resolved_config["env"]["HOME"] = str(temp_home.absolute())
-            resolved_config["env"]["USERPROFILE"] = str(temp_home.absolute())
+            if app and app.oauth_config and app.oauth_config.credential_files:
+                temp_home = PROJECT_ROOT / "backend" / "temp" / "tokens" / str(self.user_id) / name
+                temp_home.mkdir(parents=True, exist_ok=True)
+                
+                if "env" not in resolved_config:
+                    resolved_config["env"] = {}
+                
+                # Isolate environment for file-based auth
+                resolved_config["env"]["HOME"] = str(temp_home.absolute())
+                resolved_config["env"]["USERPROFILE"] = str(temp_home.absolute())
 
             # mcp-use: Register then Connect
-            logger.info(f"Adding server to mcp-use: {name} with config: {json.dumps(resolved_config, default=str)}")
+            # Sanitize config for logging
+            log_config = resolved_config.copy()
+            if "auth" in log_config:
+                log_config["auth"] = "***"
+
+            logger.info(f"Adding server to mcp-use: {name} with config: {json.dumps(log_config, default=str)}")
             self._client.add_server(name, resolved_config)
             
             logger.info(f"Creating session for {name}...")

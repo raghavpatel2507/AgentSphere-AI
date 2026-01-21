@@ -30,6 +30,7 @@ class OAuthConfig(BaseModel):
     extra_auth_params: Dict[str, str] = {} # Extra params for authorize URL (e.g. audience)
     credential_files: List[CredentialFileDefinition] = []
     token_metadata_map: Dict[str, str] = {} # Map ${VAR} to token metadata key
+    include_client_secret_on_refresh: bool = True # Set to False for Public Clients (e.g. Atlassian DCR)
 
 class SphereApp(BaseModel):
     id: str
@@ -334,7 +335,8 @@ SPHERE_REGISTRY: List[SphereApp] = [
             ],
             pkce=True,
             discovery_url="https://mcp.atlassian.com",
-            extra_auth_params={"audience": "api.atlassian.com"}
+            extra_auth_params={"audience": "api.atlassian.com"},
+            include_client_secret_on_refresh=False # Public Client DCR
         )
     ),
     SphereApp(
@@ -669,4 +671,14 @@ def get_primary_app_for_provider(provider_name: str) -> Optional[str]:
         if app.oauth_config and app.oauth_config.provider_name == provider_name:
             return app.id
             
+    return None
+
+def get_oauth_config_by_provider(provider_name: str) -> Optional[OAuthConfig]:
+    """
+    Look up OAuth provider config from the registry.
+    This replaces the old `core.oauth.registry.get_provider`.
+    """
+    for app in SPHERE_REGISTRY:
+        if app.oauth_config and app.oauth_config.provider_name == provider_name:
+            return app.oauth_config
     return None

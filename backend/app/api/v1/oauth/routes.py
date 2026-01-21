@@ -2,7 +2,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from backend.app.core.oauth.service import oauth_service
-from backend.app.core.oauth.registry import get_provider
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.dependencies import get_current_user_optional, get_current_user, get_db
 from backend.app.core.state.models import User
@@ -13,16 +12,16 @@ router = APIRouter(prefix="/oauth", tags=["OAuth"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("/{provider}/login")
+@router.get("/{app_id}/login")
 async def login(
-    provider: str,
+    app_id: str,
     redirect_url: str = Query(..., description="Frontend URL to redirect back to"),
-    target_app: Optional[str] = Query(None, description="Specific MCP App ID to configure"),
     server_url: Optional[str] = Query(None, description="Dynamic server URL (e.g. for Zoho)"),
     user: User = Depends(get_current_user)
 ):
     """
     Standard OAuth login entry point.
+    Triggers by App ID (e.g. 'gmail-mcp', 'google-calendar') or generic Provider name (legacy).
     If server_url is provided, it uses dynamic discovery (for Zoho etc).
     """
     user_id = str(user.id)
@@ -30,10 +29,10 @@ async def login(
     try:
         if server_url:
             # Resolve any dynamic discovery (Zoho style)
-            url = await oauth_service.start_dynamic_auth(user_id, server_url, redirect_url, target_app)
+            url = await oauth_service.start_dynamic_auth(user_id, server_url, redirect_url, target_app=app_id)
         else:
-            # Standard static OAuth
-            url = await oauth_service.start_auth(provider, user_id, redirect_url, target_app)
+            # Standard static OAuth via App ID
+            url = await oauth_service.start_auth(app_id, user_id, redirect_url)
             
         return JSONResponse(content={"url": url})
     except ValueError as e:

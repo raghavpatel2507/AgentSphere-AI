@@ -57,6 +57,7 @@ class AppConfig(BaseSettings):
     # OAuth
     GOOGLE_CLIENT_ID: Optional[str] = os.getenv("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET: Optional[str] = os.getenv("GOOGLE_CLIENT_SECRET")
+    OAUTH_REDIRECT_URI: str = os.getenv("OAUTH_REDIRECT_URI", "http://localhost:8000/api/v1/oauth/callback")
 
     GITHUB_CLIENT_ID: Optional[str] = os.getenv("GITHUB_CLIENT_ID")
     GITHUB_CLIENT_SECRET: Optional[str] = os.getenv("GITHUB_CLIENT_SECRET")

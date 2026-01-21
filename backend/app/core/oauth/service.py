@@ -8,7 +8,7 @@ import httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.oauth.registry import get_provider
+from backend.app.core.mcp.registry import get_oauth_config_by_provider
 from backend.app.core.oauth.pkce import generate_pkce
 from backend.app.core.state.models import OAuthToken, User
 from backend.app.config import config
@@ -22,29 +22,37 @@ AUTH_CACHE: Dict[str, Dict[str, str]] = {}
 
 class OAuthService:
 
-    async def start_auth(self, provider_name: str, user_id: str, redirect_url_frontend: str, target_app: Optional[str] = None) -> str:
+    async def start_auth(self, app_id: str, user_id: str, redirect_url_frontend: str) -> str:
         """
-        Generates the authorization URL for the given provider.
-        Stores state/verifier in cache.
-        
-        If target_app is specified, uses that app's OAuth config for scopes.
-        This ensures Gmail uses Gmail scopes, Calendar uses Calendar scopes, etc.
+        Generates the authorization URL.
+        First tries to resolve app_id to a specific MCP app config.
+        Falls back to treating app_id as a generic provider name.
         """
-        # If target_app is specified, get its OAuth config directly for accurate scopes
+        target_app = None
         oauth_config = None
-        if target_app:
-            from backend.app.core.mcp.registry import get_app_by_id
-            app = get_app_by_id(target_app)
-            if app and app.oauth_config:
-                oauth_config = app.oauth_config
-                logger.info(f"Using OAuth config from target app '{target_app}' with scopes: {oauth_config.scopes}")
         
-        # Fallback to generic provider lookup if no target app or no oauth_config
+        # 1. Try to find specific app
+        from backend.app.core.mcp.registry import get_app_by_id
+        app = get_app_by_id(app_id)
+        if app and app.oauth_config:
+            target_app = app_id
+            oauth_config = app.oauth_config
+            logger.info(f"Using OAuth config from target app '{target_app}' with scopes: {oauth_config.scopes}")
+        
+        # 2. Fallback to generic provider lookup
+        provider_name = app_id # Default assumption
         if not oauth_config:
-            oauth_config = get_provider(provider_name)
+            # Try to see if app_id is actually a provider name
+            oauth_config = get_oauth_config_by_provider(app_id)
+            if oauth_config:
+                 provider_name = oauth_config.provider_name
         
         if not oauth_config:
-            raise ValueError(f"Provider {provider_name} not configured")
+            raise ValueError(f"No OAuth configuration found for '{app_id}'")
+
+        # Use provider name from config if available (authoritative)
+        if hasattr(oauth_config, "provider_name"):
+            provider_name = oauth_config.provider_name
 
         # Check for static credentials
         client_id_var = getattr(oauth_config, "client_id_env", None)
@@ -62,10 +70,14 @@ class OAuthService:
 
         # Generate State and PKCE
         state = secrets.token_urlsafe(32) # Use random string as state
+        
+        # Use config for redirect_uri
+        redirect_uri = config.OAUTH_REDIRECT_URI
+        
         extra_params = {
             "response_type": "code",
             "client_id": client_id,
-            "redirect_uri": f"http://localhost:8000/api/v1/oauth/callback", # TODO: Make dynamic/env based // hardocded as per user req
+            "redirect_uri": redirect_uri,
             "state": state,
             "scope": " ".join(oauth_config.scopes),
             "access_type": "offline", # Google specific for refresh token
@@ -123,15 +135,18 @@ class OAuthService:
         target_app = cache_data.get("target_app")
         verifier = cache_data.get("verifier")
 
-        provider = get_provider(provider_name)
+        provider = get_oauth_config_by_provider(provider_name)
         client_id = getattr(config, provider.client_id_env)
         client_secret = getattr(config, provider.client_secret_env)
 
         # Prepare Request
+        # Use config for redirect_uri
+        redirect_uri = config.OAUTH_REDIRECT_URI
+        
         data = {
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": "http://localhost:8000/api/v1/oauth/callback",
+            "redirect_uri": redirect_uri,
             "client_id": client_id,
             "client_secret": client_secret,
         }
@@ -161,9 +176,12 @@ class OAuthService:
         """Upsert token in DB using app_id for per-app storage."""
         access_token = data.get("access_token")
         refresh_token = data.get("refresh_token")
-        expires_in = data.get("expires_in", 3600)
         
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        # If expires_in provided, calculate expiry. Otherwise None (indefinite).
+        expires_in = data.get("expires_in")
+        expires_at = None
+        if expires_in is not None:
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
 
         async with AsyncSessionLocal() as session:
             # Check existing by app_id (or provider if app_id not provided for backward compat)
@@ -223,9 +241,10 @@ class OAuthService:
                 return None
                 
             if token.is_expired:
-                logger.info(f"Token for {app_id} expired. Refreshing...")
+                logger.info(f"Token for {app_id} is EXPIRED (Now: {datetime.now(timezone.utc)}, Exp: {token.expires_at}). Refreshing...")
                 return await self.refresh_token(token, session)
-                
+            
+            logger.info(f"Token for {app_id} is VALID (Now: {datetime.now(timezone.utc)}, Exp: {token.expires_at}). Using existing.")
             return token.access_token
 
     async def get_full_credentials(self, user_id: str, app_id: str) -> Optional[Dict[str, Any]]:
@@ -251,8 +270,13 @@ class OAuthService:
                 logger.warning(f"No OAuth config found for app {app_id}")
                 return None
                 
-            client_id = app.oauth_config.client_id or getattr(config, app.oauth_config.client_id_env)
-            client_secret = app.oauth_config.client_secret or getattr(config, app.oauth_config.client_secret_env)
+            client_id = app.oauth_config.client_id
+            if not client_id and app.oauth_config.client_id_env:
+                client_id = getattr(config, app.oauth_config.client_id_env, None)
+
+            client_secret = app.oauth_config.client_secret
+            if not client_secret and app.oauth_config.client_secret_env:
+                client_secret = getattr(config, app.oauth_config.client_secret_env, None)
             
             # Check for Dynamic Credentials in token.raw
             if token.raw:
@@ -264,7 +288,10 @@ class OAuthService:
             
             # Ensure valid token
             if token.is_expired:
-                await self.refresh_token(token, session)
+                res = await self.refresh_token(token, session)
+                if not res:
+                     logger.error(f"Failed to refresh expired token for {app_id}")
+                     return None
                 
             return {
                 "token": token.access_token,
@@ -291,30 +318,66 @@ class OAuthService:
                 provider_config = app.oauth_config
 
         if not provider_config:
-            provider_config = get_provider(token.provider)
+            provider_config = get_oauth_config_by_provider(token.provider)
             
-        client_id = provider_config.client_id or getattr(config, provider_config.client_id_env)
-        client_secret = provider_config.client_secret or getattr(config, provider_config.client_secret_env)
+        client_id = provider_config.client_id
+        if not client_id and provider_config.client_id_env:
+            client_id = getattr(config, provider_config.client_id_env, None)
+            
+        client_secret = provider_config.client_secret
+        if not client_secret and provider_config.client_secret_env:
+            client_secret = getattr(config, provider_config.client_secret_env, None)
+        
+        # Check for Dynamic Credentials in token.raw (e.g. for Atlassian/Zoho)
+        token_url = provider_config.token_url
+        if token.raw:
+             if "_client_id" in token.raw:
+                 client_id = token.raw["_client_id"]
+             if "_client_secret" in token.raw:
+                 client_secret = token.raw["_client_secret"]
+             if "_token_url" in token.raw:
+                 token_url = token.raw["_token_url"]
         
         data = {
             "grant_type": "refresh_token",
             "refresh_token": token.refresh_token,
             "client_id": client_id,
-            "client_secret": client_secret,
+            "redirect_uri": config.OAUTH_REDIRECT_URI,
         }
+        
+        # Generic handling for audience (e.g. for Atlassian)
+        if provider_config.extra_auth_params and "audience" in provider_config.extra_auth_params:
+             data["audience"] = provider_config.extra_auth_params["audience"]
+        
+        # Generically decide whether to include client_secret
+        # Public clients (like Atlassian DCR) must NOT send it
+        if client_secret and getattr(provider_config, "include_client_secret_on_refresh", True):
+            data["client_secret"] = client_secret
         
         try:
             async with httpx.AsyncClient() as client:
-                resp = await client.post(provider_config.token_url, data=data)
+                resp = await client.post(token_url, data=data)
                 resp.raise_for_status()
                 new_data = resp.json()
                 
             token.access_token = new_data["access_token"]
-            token.expires_at = datetime.now(timezone.utc) + timedelta(seconds=new_data.get("expires_in", 3600))
+            
+            # Update expiry if provided, default to 1 hour for refreshed tokens if missing
+            new_expires_in = new_data.get("expires_in")
+            if new_expires_in:
+                 token.expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(new_expires_in))
+            else:
+                 # If no expiry returned on refresh, assume 1 hour to force subsequent checks 
+                 # or keep as is? Standard says it should be there. Default 3600 is safe.
+                 token.expires_at = datetime.now(timezone.utc) + timedelta(seconds=3600)
             if "refresh_token" in new_data:
                 token.refresh_token = new_data["refresh_token"]
             
-            token.raw = new_data
+            # Merge new data into existing raw to preserve DCR creds (_client_id etc)
+            merged_raw = token.raw.copy() if token.raw else {}
+            merged_raw.update(new_data)
+            token.raw = merged_raw
+            
             await session.commit()
             return token.access_token
             
@@ -427,7 +490,7 @@ class OAuthService:
         Used for providers like Zoho where the URL is user-provided.
         Fallback to Manual Auth if URL contains 'key=' and OAuth discovery fails.
         """
-        redirect_uri = "http://localhost:8000/api/v1/oauth/callback"
+        redirect_uri = config.OAUTH_REDIRECT_URI
         
         # 0. Check for Manual Auth Key in URL
         from urllib.parse import urlparse, parse_qs
@@ -616,7 +679,7 @@ class OAuthService:
         client_id = cache_data["client_id"]
         client_secret = cache_data.get("client_secret")
         
-        redirect_uri = "http://localhost:8000/api/v1/oauth/callback"
+        redirect_uri = config.OAUTH_REDIRECT_URI
         
         # Prepare token request
         data = {
