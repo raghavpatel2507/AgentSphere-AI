@@ -17,6 +17,7 @@ async def login(
     app_id: str,
     redirect_url: str = Query(..., description="Frontend URL to redirect back to"),
     server_url: Optional[str] = Query(None, description="Dynamic server URL (e.g. for Zoho)"),
+    target_app: Optional[str] = Query(None, description="Specific app ID to target (if app_id is generic provider)"),
     user: User = Depends(get_current_user)
 ):
     """
@@ -32,7 +33,8 @@ async def login(
             url = await oauth_service.start_dynamic_auth(user_id, server_url, redirect_url, target_app=app_id)
         else:
             # Standard static OAuth via App ID
-            url = await oauth_service.start_auth(app_id, user_id, redirect_url)
+            # Pass target_app if provided (e.g. app_id="google", target_app="google-drive")
+            url = await oauth_service.start_auth(app_id, user_id, redirect_url, target_app=target_app)
             
         return JSONResponse(content={"url": url})
     except ValueError as e:

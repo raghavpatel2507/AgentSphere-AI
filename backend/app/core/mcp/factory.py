@@ -69,9 +69,17 @@ async def build_mcp_config(server_name: str, user_id: str, db_config: Optional[M
              config_template["auth"] = new_auth
         elif isinstance(config_template["auth"], str):
              resolved_auth = await resolve_value(config_template["auth"])
+             # Check if this is a bypass (key-in-URL) auth - should have no bearer token
+             token_meta = await oauth_service.get_token_metadata(user_id, server_name)
+             is_bypass = token_meta and token_meta.get("_bypass")
+             
              # Only delete if it's explicitly empty AND wasn't a placeholder 
              # (or if we want to allow manager.py to inject it later)
-             if not resolved_auth and not app_def.oauth_config:
+             if is_bypass:
+                 # Key-in-URL auth: remove auth header entirely, URL has the key
+                 del config_template["auth"]
+                 logger.info(f"Bypass auth detected for {server_name}, removing auth header (key in URL)")
+             elif not resolved_auth and not app_def.oauth_config:
                  del config_template["auth"]
              elif resolved_auth:
                  config_template["auth"] = resolved_auth

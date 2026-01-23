@@ -295,6 +295,30 @@ class MCPManager:
             
             logger.info(f"✅ Connected: {name}")
         except Exception as e:
+            error_str = str(e).lower()
+            is_auth_error = "401" in error_str or "unauthorized" in error_str or "oauthauthenticationerror" in type(e).__name__.lower()
+            
+            if is_auth_error:
+                # Auth failure - delete stale token to force re-authentication on next attempt
+                logger.warning(f"🔐 Authentication failed for {name}. Deleting stale token to trigger re-auth.")
+                try:
+                    from backend.app.core.oauth.service import oauth_service
+                    from backend.app.db import AsyncSessionLocal
+                    from backend.app.core.state.models import OAuthToken
+                    from sqlalchemy import delete
+                    
+                    async with AsyncSessionLocal() as session:
+                        await session.execute(
+                            delete(OAuthToken).where(
+                                OAuthToken.user_id == str(self.user_id),
+                                OAuthToken.app_id == name
+                            )
+                        )
+                        await session.commit()
+                    logger.info(f"🗑️ Deleted stale token for {name}. User must re-authenticate.")
+                except Exception as cleanup_error:
+                    logger.error(f"Failed to cleanup stale token: {cleanup_error}")
+                    
             logger.error(f"❌ Connection failed for {name}: {e}")
             import traceback
             logger.error(traceback.format_exc())
@@ -439,8 +463,8 @@ class MCPManager:
                     if tool.name in disabled_tools:
                         continue
                     
-                    # Fix output types (common issue with some tools)
-                    tool = self._ensure_string_output(tool)
+                    # Wrap tool execution for self-healing auth and type safety
+                    tool = self._wrap_tool_execution(tool, name)
                     all_tools.append(tool)
                     
             except Exception as e:
@@ -588,16 +612,72 @@ class MCPManager:
     # Helpers
     # --------------------------------------------------------------------------
 
-    def _ensure_string_output(self, tool: StructuredTool) -> StructuredTool:
-        """Wraps tool to force string output (fixes 422 validation errors)."""
+    def _wrap_tool_execution(self, tool: StructuredTool, server_name: str) -> StructuredTool:
+        """
+        Wraps tool execution to provide:
+        1. Self-Healing Auth: Retries on 401/Unauthorized errors by restarting the server connection.
+        2. Type Safety: Forces string output to prevent 422 errors.
+        """
         original_func = tool.coroutine
         
         async def wrapper(**kwargs):
-            # Fix specific tool quirks here if needed
-            if "firecrawl" in tool.name and "sources" in kwargs:
-                 kwargs["sources"] = [{"type": s} if isinstance(s, str) else s for s in kwargs["sources"]]
+            try:
+                # --------------------------------------------------------------
+                # 1. Attempt Execution
+                # --------------------------------------------------------------
+                
+                # Fix specific tool quirks here if needed
+                if "firecrawl" in tool.name and "sources" in kwargs:
+                     kwargs["sources"] = [{"type": s} if isinstance(s, str) else s for s in kwargs["sources"]]
+                
+                result = await original_func(**kwargs)
+                
+            except Exception as e:
+                # --------------------------------------------------------------
+                # 2. Handle Authentication Failures (Self-Healing)
+                # --------------------------------------------------------------
+                error_msg = str(e).lower()
+                is_auth_error = "401" in error_msg or "unauthorized" in error_msg or "authentication failed" in error_msg
+                
+                if is_auth_error:
+                    logger.warning(f"🔄 Token expired for {server_name} during tool '{tool.name}'. Triggering self-healing refresh...")
+                    
+                    try:
+                        # 1. Force Restart (Disconnect -> Reconnect)
+                        # This triggers _connect_single -> get_full_credentials -> oauth_service.get_valid_token -> refresh_token
+                        await self.restart_server(server_name)
+                        
+                        # 2. We need to get the tool function from the NEW session
+                        # We can't just call original_func because it's bound to the OLD session/client
+                        
+                        logger.info(f"🔄 verifying new session for {server_name}...")
+                        new_session = self._sessions.get(server_name)
+                        if not new_session:
+                             raise ValueError("Failed to re-establish session after restart")
+                             
+                        # 3. Find the tool in the new session to get the new callable
+                        # This is a bit expensive but necessary to bind to the new authenticated session
+                        new_tools_list = await self._fetch_tools_from_session(server_name, new_session)
+                        new_tool = next((t for t in new_tools_list if t.name == tool.name), None)
+                        
+                        if not new_tool:
+                             raise ValueError(f"Tool {tool.name} not found after restart")
+                             
+                        # 4. Retry Execution with new callable
+                        logger.info(f"🔄 Retrying {tool.name} with refreshed token...")
+                        result = await new_tool.coroutine(**kwargs)
+                        
+                    except Exception as retry_error:
+                        # If retry fails, return original error or retry error
+                        logger.error(f"❌ Self-healing failed for {server_name}: {retry_error}")
+                        raise e # Raise the ORIGINAL error to show the auth failure to user if repair failed
+                else:
+                    # Not an auth error, just raise normally
+                    raise e
             
-            result = await original_func(**kwargs)
+            # --------------------------------------------------------------
+            # 3. Type Safety / Output Normalization
+            # --------------------------------------------------------------
             
             # Ensure string
             if not isinstance(result, str):

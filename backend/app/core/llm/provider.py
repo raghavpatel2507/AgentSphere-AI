@@ -64,14 +64,16 @@ class GeminiProvider(LLMProvider):
 
 class ClaudeProvider(LLMProvider):
     def create_model(self, config: Dict[str, Any]) -> BaseChatModel:
+        from langchain_anthropic import ChatAnthropic
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY not found in environment")
             
         return ChatAnthropic(
-            model_name=config.get("model", "claude-3-sonnet-20240229"),
+            model_name=config.get("model", "claude-sonnet-4-5-20250929"),
             temperature=config.get("temperature", 0.7),
             anthropic_api_key=api_key,
+            max_retries=3,
             streaming=True
         )
 
@@ -103,7 +105,8 @@ class LLMFactory:
             "gemini": GeminiProvider(),
             "claude": ClaudeProvider(),
             "groq": GroqProvider(),
-            "openrouter": OpenROuterProvider()
+            "openrouter": OpenROuterProvider(),
+            "anthropic": ClaudeProvider()
         }
         
         provider = providers.get(provider_name)

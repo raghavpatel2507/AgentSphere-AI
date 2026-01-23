@@ -58,7 +58,11 @@ async def list_servers(
     
     # Get icons from registry for matching
     from backend.app.core.mcp.registry import SPHERE_REGISTRY
-    registry_icons = {app.name: app.icon for app in SPHERE_REGISTRY}
+    registry_icons = {}
+    for app in SPHERE_REGISTRY:
+        registry_icons[app.id] = app.icon
+        registry_icons[app.name] = app.icon
+
     
     # Also fetch from DB for basic info (id, timestamps)
     result = await db.execute(

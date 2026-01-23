@@ -22,22 +22,33 @@ AUTH_CACHE: Dict[str, Dict[str, str]] = {}
 
 class OAuthService:
 
-    async def start_auth(self, app_id: str, user_id: str, redirect_url_frontend: str) -> str:
+    async def start_auth(self, app_id: str, user_id: str, redirect_url_frontend: str, target_app: Optional[str] = None) -> str:
         """
         Generates the authorization URL.
         First tries to resolve app_id to a specific MCP app config.
         Falls back to treating app_id as a generic provider name.
+        If target_app is provided, it takes precedence for config lookup.
         """
-        target_app = None
         oauth_config = None
+        final_target_app = target_app
         
-        # 1. Try to find specific app
+        # 1. Try to find specific app (Target App takes precedence)
         from backend.app.core.mcp.registry import get_app_by_id
-        app = get_app_by_id(app_id)
-        if app and app.oauth_config:
-            target_app = app_id
-            oauth_config = app.oauth_config
-            logger.info(f"Using OAuth config from target app '{target_app}' with scopes: {oauth_config.scopes}")
+        
+        # If target_app provided, try that first
+        if target_app:
+            app = get_app_by_id(target_app)
+            if app and app.oauth_config:
+                oauth_config = app.oauth_config
+                logger.info(f"Using OAuth config from target app '{target_app}' with scopes: {oauth_config.scopes}")
+                
+        # If no target_app or not found, try app_id
+        if not oauth_config:
+            app = get_app_by_id(app_id)
+            if app and app.oauth_config:
+                final_target_app = app_id
+                oauth_config = app.oauth_config
+                logger.info(f"Using OAuth config from app_id '{app_id}' with scopes: {oauth_config.scopes}")
         
         # 2. Fallback to generic provider lookup
         provider_name = app_id # Default assumption
@@ -100,14 +111,14 @@ class OAuthService:
                 "provider": provider_name,
                 "user_id": str(user_id),
                 "redirect_url": redirect_url_frontend,
-                "target_app": target_app
+                "target_app": final_target_app
             }
         else:
              AUTH_CACHE[state] = {
                 "provider": provider_name,
                 "user_id": str(user_id),
                 "redirect_url": redirect_url_frontend,
-                "target_app": target_app
+                "target_app": final_target_app
             }
 
         # Build URL
@@ -177,11 +188,14 @@ class OAuthService:
         access_token = data.get("access_token")
         refresh_token = data.get("refresh_token")
         
-        # If expires_in provided, calculate expiry. Otherwise None (indefinite).
+        # Only track expiry if we have a refresh token to renew it
+        # Tokens without refresh capability are treated as persistent
         expires_in = data.get("expires_in")
         expires_at = None
-        if expires_in is not None:
+        if refresh_token and expires_in is not None:
             expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
+        elif not refresh_token and expires_in is not None:
+            logger.info(f"No refresh_token for {provider} - treating as persistent (ignoring expires_in: {expires_in}s)")
 
         async with AsyncSessionLocal() as session:
             # Check existing by app_id (or provider if app_id not provided for backward compat)
@@ -517,6 +531,9 @@ class OAuthService:
                      from urllib.parse import urlparse
                      provider_name = urlparse(server_url).netloc
 
+                # Generate state for cache key
+                state = secrets.token_urlsafe(32)
+                
                 # Store data for callback bypass
                 AUTH_CACHE[state] = {
                     "provider": provider_name,
@@ -602,7 +619,8 @@ class OAuthService:
             "token_url": token_url,
             "client_id": client_id,
             "client_secret": client_secret,
-            "is_dynamic": True  # Flag to indicate dynamic OAuth
+            "is_dynamic": True,  # Flag to indicate dynamic OAuth
+            "scope": None  # Will be set below after we build scope_str
         }
         
         # 5. Build authorization URL
@@ -628,6 +646,15 @@ class OAuthService:
 
         if not scope_str and scopes_supported:
             scope_str = " ".join(scopes_supported[:5])
+        
+        # CRITICAL: Always ensure offline_access is included for refresh token support
+        # This is the OAuth 2.0 standard way to request a refresh token
+        if scope_str and "offline_access" not in scope_str:
+            scope_str = scope_str + " offline_access"
+            logger.info(f"Added 'offline_access' scope for refresh token support")
+        
+        # Store scope in cache for use during token exchange
+        AUTH_CACHE[state]["scope"] = scope_str
             
         if scope_str:
             params["scope"] = scope_str
@@ -694,6 +721,11 @@ class OAuthService:
         if verifier:
             data["code_verifier"] = verifier
         
+        # Include scope in token request - some servers require this to return refresh_token
+        scope = cache_data.get("scope")
+        if scope:
+            data["scope"] = scope
+        
         logger.info(f"Exchanging code for tokens at: {token_url}")
         
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -704,6 +736,13 @@ class OAuthService:
             )
             resp.raise_for_status()
             token_data = resp.json()
+        
+        # DEBUG: Log the actual response to see if refresh_token is present
+        logger.info(f"Token response keys: {list(token_data.keys())}")
+        if "refresh_token" in token_data:
+            logger.info(f"✅ Refresh token RECEIVED from {token_url}")
+        else:
+            logger.warning(f"⚠️ NO refresh_token in response from {token_url}. Keys: {list(token_data.keys())}")
         
         # Store server_url in token metadata for later use
         token_data["_server_url"] = server_url

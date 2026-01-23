@@ -30,7 +30,6 @@ class OAuthConfig(BaseModel):
     extra_auth_params: Dict[str, str] = {} # Extra params for authorize URL (e.g. audience)
     credential_files: List[CredentialFileDefinition] = []
     token_metadata_map: Dict[str, str] = {} # Map ${VAR} to token metadata key
-    include_client_secret_on_refresh: bool = True # Set to False for Public Clients (e.g. Atlassian DCR)
 
 class SphereApp(BaseModel):
     id: str
@@ -133,7 +132,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="huggingface",
         name="Hugging Face",
         description="Hugging Face Hub integration for accessing models, datasets, spaces, and papers.",
-        icon="https://cdn.brandfetch.io/huggingface.co/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/idGqKHD5xE/theme/dark/symbol.svg?c=1bxid64Mup7aczewSAYMX&t=1668516030712",
         category="Development",
         config_template={
             "type": "httpx",
@@ -227,7 +226,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="Mysql",
         name="Mysql",
         description="MySQL agent to list tables and execute read-only SQL queries on database. Use MySQL in Agentsphere to interact with your data through natural conversation. Just ask and MySQL will handle the rest.",
-        icon="https://cdn.brandfetch.io/mysql.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/idBdG8DdKe/theme/dark/logo.svg?c=1bxid64Mup7aczewSAYMX&t=1667573657581",
         category="Database",
         config_template={
             "command": "npx",
@@ -335,8 +334,8 @@ SPHERE_REGISTRY: List[SphereApp] = [
             ],
             pkce=True,
             discovery_url="https://mcp.atlassian.com",
-            extra_auth_params={"audience": "api.atlassian.com"},
-            include_client_secret_on_refresh=False # Public Client DCR
+            include_client_secret_on_refresh=False, # Public Client DCR
+            extra_auth_params={"audience": "api.atlassian.com"}
         )
     ),
     SphereApp(
@@ -359,7 +358,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="google-drive",
         name="Google Drive",
         description="Connect and manage your Google Drive files.",
-        icon="https://cdn.brandfetch.io/google.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idncaAgFGT.svg?c=1bxid64Mup7aczewSAYMX&t=1755572716016",
         category="Storage",
         config_template={
             "command": "npx",
@@ -427,7 +426,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="pinecone-mcp",
         name="Pinecone",
         description="Vector database agent for semantic search and long-term memory.",
-        icon="https://cdn.brandfetch.io/pinecone.io/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/idCLuo1dQ8/w/178/h/178/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1718349235873",
         category="Database",
         config_template={
             "command": "npx",
@@ -444,7 +443,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="firecrawl-mcp",
         name="Firecrawl",
         description="Web scraping and crawling agent that converts websites to LLM-ready markdown.",
-        icon="https://cdn.brandfetch.io/firecrawl.dev/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/idBmlvZtut/theme/dark/icon.svg?c=1bxid64Mup7aczewSAYMX&t=1755921852181",
         category="Search",
         config_template={
             "command": "npx",
@@ -461,7 +460,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="youtube",
         name="YouTube",
         description="Search and fetch video details, transcripts, and metadata.",
-        icon="https://cdn.brandfetch.io/youtube.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://cdn.brandfetch.io/idVfYwcuQz/theme/dark/symbol.svg?c=1bxid64Mup7aczewSAYMX&t=1728452988041",
         category="Media",
         config_template={
             "command": "npx",
@@ -512,7 +511,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="mobile",
         name="Mobile",
         description="Connect to mobile devices for automation and testing.",
-        icon="https://cdn.brandfetch.io/android.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        icon="https://avatars.githubusercontent.com/u/205340688?s=48&v=4",
         category="Tooling",
         config_template={
             "command": "npx",
@@ -520,6 +519,23 @@ SPHERE_REGISTRY: List[SphereApp] = [
             "env": {}
         },
         auth_fields=[]
+    ),
+    SphereApp(
+        id="megic",
+        name="Megic",
+        description="megic mcp powerful AI-driven tool that helps developers create beautiful, modern UI components instantly through natural language descriptions. It integrates seamlessly with popular IDEs and provides a streamlined workflow for UI development.",
+        icon="https://avatars.githubusercontent.com/u/199367026?s=48&v=4",
+        category="Development",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@21st-dev/magic@latest"],
+            "env": {
+                "API_KEY": "${MEGIC_API_KEY}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="MEGIC_API_KEY", label="API Key", type="password")
+        ]
     ),
     SphereApp(
         id="aws-knowledge",
@@ -563,6 +579,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
             client_id_env="",          # Uses Dynamic Client Registration
             client_secret_env="",
             pkce=True,
+            include_client_secret_on_refresh=False, # Public Client DCR
             token_metadata_map={
                 "ZOHO_URL": "_server_url",
                 "ZOHO_TOKEN": "access_token"
@@ -574,7 +591,7 @@ SPHERE_REGISTRY: List[SphereApp] = [
         id="gmail-mcp",
         name="Gmail",
         description="Connect and manage your Gmail account.",
-        icon="https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idncaAgFGT.svg?c=1bxid64Mup7aczewSAYMX&t=1755572716016",
+        icon="https://cdn.brandfetch.io/id5o3EIREg/theme/dark/symbol.svg?c=1bxid64Mup7aczewSAYMX&t=1696475443284",
         category="Storage",
         config_template={
             "command": "npx",

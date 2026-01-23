@@ -154,37 +154,35 @@ JSON FORMAT:
             # Final cleanup and JSON parsing
             clean_content = full_content.strip()
             
-            # Remove possible think tags or preambles if LLM broke format
-            if "</think>" in clean_content:
-                clean_content = clean_content.split("</think>")[-1].strip()
-
+            # 1. Handle Markdown code blocks
             if "```json" in clean_content:
                 clean_content = clean_content.split("```json")[1].split("```")[0].strip()
             elif "```" in clean_content:
-                clean_content = clean_content.split("```")[1].split("```")[0].strip()
+                # Find the first and last triple backticks
+                parts = clean_content.split("```")
+                if len(parts) >= 3:
+                    clean_content = parts[1].strip()
             
-            # Robust JSON extraction
+            # 2. Heuristic: locate first '{' and last '}'
+            if not clean_content.startswith("{"):
+                start_idx = clean_content.find("{")
+                end_idx = clean_content.rfind("}")
+                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                    clean_content = clean_content[start_idx:end_idx+1]
+            
             try:
-                # 1. Try direct parse
                 plan_data = json.loads(clean_content)
-                # If we got response tokens already, ensure plan_data['response'] matches
-                # but prefers the structured data if valid.
                 yield plan_data
             except Exception:
-                # 2. Try to find the JSON block inside text
-                import re
+                # One more try: strip common problematic chars
                 try:
-                    json_match = re.search(r'\{.*\}', clean_content, re.DOTALL)
-                    if json_match:
-                        plan_data = json.loads(json_match.group(0))
-                        yield plan_data
-                    else:
-                        raise ValueError("No JSON block found")
-                except Exception:
-                    # 3. Last fallback: if it doesn't look like JSON at all, treat as direct response
-                    yield {"response": clean_content, "servers": []}
+                    # Remove potential leading/trailing garbage
+                    sanitized = clean_content.strip().lstrip('`').rstrip('`').strip()
+                    plan_data = json.loads(sanitized)
+                    yield plan_data
+                except:
+                    yield {"response": full_content, "servers": []}
                 
         except Exception as e:
             logger.error(f"Planning failed: {e}")
             yield {"response": "I encountered an error planning your task.", "servers": []}
-

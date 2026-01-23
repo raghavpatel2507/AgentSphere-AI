@@ -313,3 +313,22 @@ async def get_chat_messages(
         )
         for msg in messages
     ]
+
+
+@router.get("/suggestions", response_model=list[str])
+async def get_chat_suggestions(
+    q: str = "",
+    limit: int = 5,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get prompt autocomplete suggestions from message history.
+    """
+    if not q or len(q.strip()) < 2:
+        return []
+        
+    from backend.app.services.chat_service import ChatService
+    chat_service = ChatService(current_user.id, db)
+    
+    return await chat_service.get_suggestions(q, limit)

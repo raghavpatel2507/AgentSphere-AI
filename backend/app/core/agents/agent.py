@@ -312,8 +312,62 @@ class Agent:
         config = {"configurable": {"thread_id": thread_id}}
         
         try:
+            # --- RECONCILIATION: Handle mismatch between user decisions and pending tool calls ---
+            # If we have 2 pending calls but user only approved 1, we must provide 2 results
+            # to prevent "ValueError: mismatch" in HumanInTheLoopMiddleware.
+            
+            # 1. Fetch current state to see what's pending
+            current_state = await self.agent.aget_state(config)
+            
+            reconciled_decisions = decisions
+            
+            if current_state and current_state.tasks:
+                # Find the interrupt value
+                interrupt_val = None
+                for task in current_state.tasks:
+                    if task.interrupts:
+                        interrupt_val = task.interrupts[0].value
+                        break
+                
+                if interrupt_val:
+                    pending_requests = interrupt_val.get("action_requests", [])
+                    
+                    if len(pending_requests) > len(decisions):
+                        logger.warning(
+                            f"HITL Decision Mismatch: Pending {len(pending_requests)} requests, "
+                            f"received {len(decisions)} decisions. Reconciling..."
+                        )
+                        
+                        # We need valid decisions for ALL pending requests.
+                        # Strategy: Match the ones we have, "soft reject" the others to queue them.
+                        
+                        new_decisions = []
+                        used_indices = set()
+                        
+                        # match provided decisions to requests if possible
+                        # (Since we don't have IDs easily, we assume the frontend sends the "first" one.
+                        #  Better approach: strict order or fuzzy matching.
+                        #  For now: Use the decisions for the first N requests, soft-reject the rest.)
+                        
+                        for i in range(len(pending_requests)):
+                            if i < len(decisions):
+                                new_decisions.append(decisions[i])
+                            else:
+                                # Create a "soft reject" for the unaddressed tool call
+                                # This tells the agent: "This tool didn't fail, but we are waiting to run it."
+                                # The agent's loop should then pick it up again in the next step.
+                                req = pending_requests[i]
+                                tool_name = req.get("name", "tool")
+                                
+                                new_decisions.append({
+                                    "type": "reject",
+                                    "message": f"Sequential processing: Action '{tool_name}' queued. Please retry after current action completes."
+                                })
+                        
+                        reconciled_decisions = new_decisions
+
             async for mode, chunk in self.agent.astream(
-                Command(resume={"decisions": decisions}),
+                Command(resume={"decisions": reconciled_decisions}),
                 config=config,
                 stream_mode=["updates", "messages"],
             ):
