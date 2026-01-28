@@ -7,7 +7,7 @@ from sqlalchemy import text
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.core.config.database import async_engine
+from backend.app.core.config.database import async_engine
 
 async def migrate_users_table():
     print("🔌 Connecting to database...")
@@ -37,3 +37,4 @@ async def migrate_users_table():
 
 if __name__ == "__main__":
     asyncio.run(migrate_users_table())
+

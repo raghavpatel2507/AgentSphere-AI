@@ -8,11 +8,11 @@ import logging
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from sqlalchemy import text, inspect
-from src.core.config.database import async_engine, Base, Tenant, TenantConfig
-from src.core.state.models import Conversation, Message, User, MCPServerConfig
+from backend.app.core.config.database import async_engine, Base, Tenant, TenantConfig
+from backend.app.core.state.models import Conversation, Message, User, MCPServerConfig
 
 # Import all models to ensure they are registered with Base
-# (Conversation and Message are already imported from src.core.state.models)
+# (Conversation and Message are already imported from backend.app.core.state.models)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("setup_database")
@@ -56,3 +56,4 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"❌ Setup failed: {e}")
         sys.exit(1)
+

@@ -1,0 +1,701 @@
+from typing import Dict, List, Any, Optional
+from pydantic import BaseModel
+
+class AuthField(BaseModel):
+    name: str
+    label: str
+    description: Optional[str] = None
+    type: str = "text"  # text, password, etc.
+    required: bool = True
+
+class CredentialFileDefinition(BaseModel):
+    """Defines a temporary file that needs to be generated before connecting to a server."""
+    filename: str
+    content_template: Any # Dict or "__FULL_CREDS__"
+    env_vars: List[str] = []
+    inject_as_auth: bool = False
+
+class OAuthConfig(BaseModel):
+    provider_name: str # e.g. "google", "github"
+    authorize_url: str
+    token_url: str
+    scopes: List[str]
+    client_id_env: Optional[str] = None
+    client_secret_env: Optional[str] = None
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    pkce: bool = True
+    userinfo_url: Optional[str] = None
+    discovery_url: Optional[str] = None # Base URL for discovery (e.g. https://mcp.atlassian.com)
+    extra_auth_params: Dict[str, str] = {} # Extra params for authorize URL (e.g. audience)
+    credential_files: List[CredentialFileDefinition] = []
+    token_metadata_map: Dict[str, str] = {} # Map ${VAR} to token metadata key
+
+class SphereApp(BaseModel):
+    id: str
+    name: str
+    description: str
+    icon: str  # Icon name or SVG
+    category: str
+    config_template: Dict[str, Any]
+    auth_fields: List[AuthField] = []
+    is_custom: bool = False
+    is_primary: bool = False # If multiple apps exist for a provider, which one is default?
+    oauth_config: Optional[OAuthConfig] = None
+
+# Initial Registry based on common MCP servers
+SPHERE_REGISTRY: List[SphereApp] = [
+    SphereApp(
+        id="accuweather",
+        name="AccuWeather",
+        description="Weather forecasting and information agent (AccuWeather API).",
+        icon="https://cdn.brandfetch.io/accuweather.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Weather",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@timlukahorstmann/mcp-weather"],
+            "env": {
+                "ACCUWEATHER_API_KEY": "${ACCUWEATHER_API_KEY}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="ACCUWEATHER_API_KEY", label="API Key", type="password")
+        ]
+    ),
+    SphereApp(
+        id="arxiv",
+        name="arXiv",
+        description="Search, analyze and read scientific papers from arXiv.",
+        icon="https://cdn.brandfetch.io/arxiv.org/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Research",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-arxiv"],
+            "env": {}
+        },
+        auth_fields=[]
+    ),
+    SphereApp(
+        id="github",
+        name="GitHub",
+        description="GitHub agent for repository management and code operations.",
+        icon="https://cdn.brandfetch.io/github.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Development",
+        config_template={
+            "type": "httpx",
+            "url": "https://api.githubcopilot.com/mcp/",
+            "auth": "${GITHUB_TOKEN}"
+        },
+        auth_fields=[],
+        oauth_config=OAuthConfig(
+            provider_name="github",
+            authorize_url="https://github.com/login/oauth/authorize",
+            token_url="https://github.com/login/oauth/access_token",
+            scopes=["repo", "read:user", "user:email"],
+            client_id_env="GITHUB_CLIENT_ID",
+            client_secret_env="GITHUB_CLIENT_SECRET",
+            pkce=False
+        ),
+        is_primary=True
+    ),
+    SphereApp(
+        id="exa",
+        name="Exa",
+        description="Web crawling, company research, competitor analysis, and research paper retrieval.",
+        icon="https://cdn.brandfetch.io/exa.ai/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Search",
+        config_template={
+            "type": "httpx",
+            "url": "https://mcp.exa.ai/mcp",
+            "headers": {}
+        },
+        auth_fields=[]
+    ),
+    SphereApp(
+        id="giphy",
+        name="Giphy",
+        description="Giphy integration for searching and retrieving GIFs.",
+        icon="https://cdn.brandfetch.io/giphy.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Media",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "mcp-server-giphy"],
+            "env": {
+                "GIPHY_API_KEY": "${GIPHY_API_KEY}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="GIPHY_API_KEY", label="API Key", type="password")
+        ]
+    ),
+    SphereApp(
+        id="huggingface",
+        name="Hugging Face",
+        description="Hugging Face Hub integration for accessing models, datasets, spaces, and papers.",
+        icon="https://cdn.brandfetch.io/idGqKHD5xE/theme/dark/symbol.svg?c=1bxid64Mup7aczewSAYMX&t=1668516030712",
+        category="Development",
+        config_template={
+            "type": "httpx",
+            "url": "https://huggingface.co/mcp",
+            "auth": "${HUGGINGFACE_API_KEY}"
+        },
+        auth_fields=[
+            AuthField(name="HUGGINGFACE_API_KEY", label="API Key", type="password")
+        ]
+    ),
+    SphereApp(
+        id="linear",
+        name="linear",
+        description="Linear issue tracking and project management agent. Use Linear in Agentsphere to interact with your data through natural conversation. Just ask and Linear will handle the rest.",
+        icon="https://cdn.brandfetch.io/linear.app/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Development",
+        config_template={
+            "type": "httpx",
+            "url": "https://mcp.linear.app/mcp",
+            "auth": {
+                "callback_port": 8082
+            }
+        },
+        auth_fields=[]
+    ),
+    SphereApp(
+        id="coingecko",
+        name="CoinGecko",
+        description="Cryptocurrency data agent providing real-time prices.",
+        icon="https://cdn.brandfetch.io/coingecko.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Finance",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-coingecko"],
+            "env": {}
+        },
+        auth_fields=[]
+    ),
+    SphereApp(
+        id="etherscan",
+        name="Etherscan",
+        description="Ethereum blockchain data and analytics agent.",
+        icon="https://cdn.brandfetch.io/etherscan.io/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Finance",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-etherscan"],
+            "env": {
+                "ETHERSCAN_API_KEY": "${ETHERSCAN_API_KEY}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="ETHERSCAN_API_KEY", label="API Key", type="password")
+        ]
+    ),
+    SphereApp(
+        id="elevenlabs",
+        name="ElevenLabs",
+        description="Generate high-quality AI voices and speech synthesis.",
+        icon="https://cdn.brandfetch.io/elevenlabs.io/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Media",
+        config_template={
+            "command": "uvx",
+            "args": ["elevenlabs-mcp"],
+            "env": {
+                "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="ELEVENLABS_API_KEY", label="API Key", type="password")
+        ]
+    ),
+    SphereApp(
+        id="MongoDB",
+        name="MongoDB",
+        description="Mongodb agent to list collections and executing read-only queries on database. Use Mongodb to interact with your data through natural conversation. Just ask and Mongodb will handle the rest.",
+        icon="https://cdn.brandfetch.io/ideyyfT0Lp/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Database",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "mongodb-mcp-server@latest", "--readOnly"],
+            "env": {
+                "MDB_MCP_CONNECTION_STRING": "${MDB_MCP_CONNECTION_STRING}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="MDB_MCP_CONNECTION_STRING", label="Connection String", type="text")
+        ]
+    ),
+    SphereApp(
+        id="Mysql",
+        name="Mysql",
+        description="MySQL agent to list tables and execute read-only SQL queries on database. Use MySQL in Agentsphere to interact with your data through natural conversation. Just ask and MySQL will handle the rest.",
+        icon="https://cdn.brandfetch.io/idBdG8DdKe/theme/dark/logo.svg?c=1bxid64Mup7aczewSAYMX&t=1667573657581",
+        category="Database",
+        config_template={
+            "command": "npx",
+            "command": "uvx",
+            "args": [
+                "--from",
+                "mysql-mcp-server",
+                "mysql_mcp_server"
+            ],
+            "env": {
+                "MYSQL_HOST": "localhost",
+                "MYSQL_PORT": "3306",
+                "MYSQL_USER": "${MYSQL_USER}",
+                "MYSQL_PASSWORD": "${MYSQL_PASSWORD}",
+                "MYSQL_DATABASE": "${MYSQL_DATABASE}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="MYSQL_USER", label="User", type="text"),
+            AuthField(name="MYSQL_PASSWORD", label="Password", type="password"),
+            AuthField(name="MYSQL_DATABASE", label="Database", type="text")
+        ]
+    ),
+    SphereApp(
+        id="google-calendar",
+        name="Google Calendar",
+        description="Google Calendar integration for managing events and appointments.",
+        icon="https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idMX2_OMSc.svg?c=1bxid64Mup7aczewSAYMX&t=1755572706253",
+        category="Calendar",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@cocal/google-calendar-mcp"],
+            "env": {
+                "GOOGLE_OAUTH_CREDENTIALS": "${GOOGLE_CALENDAR_OAUTH_PATH}",
+                "GOOGLE_CALENDAR_MCP_TOKEN_PATH": "${GOOGLE_CALENDAR_TOKEN_FILE}"
+            }
+        },
+        auth_fields=[],
+        oauth_config=OAuthConfig(
+            provider_name="google",
+            authorize_url="https://accounts.google.com/o/oauth2/v2/auth",
+            token_url="https://oauth2.googleapis.com/token",
+            scopes=[
+                "https://www.googleapis.com/auth/calendar",
+                "https://www.googleapis.com/auth/calendar.events",
+                "https://www.googleapis.com/auth/calendar.readonly",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
+                "openid"
+            ],
+            client_id_env="GOOGLE_CLIENT_ID",
+            client_secret_env="GOOGLE_CLIENT_SECRET",
+            pkce=True,
+            credential_files=[
+                CredentialFileDefinition(
+                    filename="gcp-oauth.keys.json",
+                    env_vars=["GOOGLE_CALENDAR_OAUTH_PATH", "GOOGLE_OAUTH_CREDENTIALS"],
+                    content_template={
+                        "installed": {
+                            "client_id": "${client_id}",
+                            "client_secret": "${client_secret}",
+                            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                            "token_uri": "${token_uri}",
+                            "redirect_uris": ["http://localhost"]
+                        }
+                    }
+                ),
+                CredentialFileDefinition(
+                    filename="tokens.json",
+                    env_vars=["GOOGLE_CALENDAR_TOKEN_FILE", "GOOGLE_CALENDAR_MCP_TOKEN_PATH"],
+                    content_template={
+                        "access_token": "${token}",
+                        "refresh_token": "${refresh_token}",
+                        "scope": "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid",
+                        "token_type": "Bearer",
+                        "expiry_date": 9999999999999
+                    }
+                )
+            ]
+        )
+    ),
+    SphereApp(
+        id="atlassian",
+        name="Atlassian Rovo",
+        description="Connect to Jira, Confluence, and Compass. Search, summarize, create and update issues or pages through natural language.",
+        icon="https://cdn.brandfetch.io/atlassian.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Productivity",
+        config_template={
+            "type": "httpx", 
+            "url": "https://mcp.atlassian.com/v1/sse",
+            "auth": "${ATLASSIAN_TOKEN}"
+        },
+        auth_fields=[],
+        oauth_config=OAuthConfig(
+            provider_name="atlassian",
+            authorize_url="https://auth.atlassian.com/authorize",
+            token_url="https://auth.atlassian.com/oauth/token",
+            scopes=[
+                "read:me",
+                "read:jira-work",
+                "write:jira-work",
+                "read:confluence-content",
+                "write:confluence-content",
+                "offline_access"
+            ],
+            pkce=True,
+            discovery_url="https://mcp.atlassian.com",
+            include_client_secret_on_refresh=False, # Public Client DCR
+            extra_auth_params={"audience": "api.atlassian.com"}
+        )
+    ),
+    SphereApp(
+        id="playwright-mcp",
+        name="Playwright",
+        description="Browser automation agent for web scraping and testing.",
+        icon="https://cdn.brandfetch.io/playwright.dev/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Tooling",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@playwright/mcp@latest"],
+            "env": {
+                "DISPLAY": ":1",
+                "PLAYWRIGHT_HEADLESS": "true"
+            }
+        },
+        auth_fields=[] # Config is internal mostly, but user could set env
+    ),
+    SphereApp(
+        id="google-drive",
+        name="Google Drive",
+        description="Connect and manage your Google Drive files.",
+        icon="https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idncaAgFGT.svg?c=1bxid64Mup7aczewSAYMX&t=1755572716016",
+        category="Storage",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@piotr-agier/google-drive-mcp"],
+            "env": {
+                "GDRIVE_CREDENTIALS_PATH": "${GDRIVE_CREDENTIALS_PATH}"
+            },
+            "auth": "${GDRIVE_CREDENTIALS_PATH}"
+        },
+        auth_fields=[],
+        oauth_config=OAuthConfig(
+            provider_name="google",
+            authorize_url="https://accounts.google.com/o/oauth2/v2/auth",
+            token_url="https://oauth2.googleapis.com/token",
+            scopes=[
+                # Google Drive scopes
+                "https://www.googleapis.com/auth/drive",
+                "https://www.googleapis.com/auth/drive.file",
+                "https://www.googleapis.com/auth/drive.readonly",
+                "https://www.googleapis.com/auth/drive.metadata.readonly",
+                # Google Docs scopes
+                "https://www.googleapis.com/auth/documents",
+                "https://www.googleapis.com/auth/documents.readonly",
+                # Google Sheets scopes
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/spreadsheets.readonly",
+                # User info
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
+                "openid"
+            ],
+            client_id_env="GOOGLE_CLIENT_ID",
+            client_secret_env="GOOGLE_CLIENT_SECRET",
+            pkce=True,
+            credential_files=[
+                CredentialFileDefinition(
+                    filename="gcp-oauth.keys.json",
+                    env_vars=["GOOGLE_DRIVE_OAUTH_CREDENTIALS"],
+                    content_template={
+                        "installed": {
+                            "client_id": "${client_id}",
+                            "client_secret": "${client_secret}",
+                            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                            "token_uri": "${token_uri}"
+                        }
+                    }
+                ),
+                CredentialFileDefinition(
+                    filename="tokens.json",
+                    env_vars=["GOOGLE_DRIVE_MCP_TOKEN_PATH"],
+                    inject_as_auth=True,
+                    content_template={
+                        "type": "authorized_user",
+                        "client_id": "${client_id}",
+                        "client_secret": "${client_secret}",
+                        "refresh_token": "${refresh_token}",
+                        "access_token": "${token}",
+                        "expiry_date": 9999999999999
+                    }
+                )
+            ]
+        )
+    ),
+    SphereApp(
+        id="pinecone-mcp",
+        name="Pinecone",
+        description="Vector database agent for semantic search and long-term memory.",
+        icon="https://cdn.brandfetch.io/idCLuo1dQ8/w/178/h/178/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1718349235873",
+        category="Database",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@pinecone-database/mcp"],
+            "env": {
+                "PINECONE_API_KEY": "${PINECONE_API_KEY}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="PINECONE_API_KEY", label="API Key", type="password")
+        ]
+    ),
+    SphereApp(
+        id="firecrawl-mcp",
+        name="Firecrawl",
+        description="Web scraping and crawling agent that converts websites to LLM-ready markdown.",
+        icon="https://cdn.brandfetch.io/idBmlvZtut/theme/dark/icon.svg?c=1bxid64Mup7aczewSAYMX&t=1755921852181",
+        category="Search",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "firecrawl-mcp"],
+            "env": {
+                "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="FIRECRAWL_API_KEY", label="API Key", type="password")
+        ]
+    ),
+    SphereApp(
+        id="youtube",
+        name="YouTube",
+        description="Search and fetch video details, transcripts, and metadata.",
+        icon="https://cdn.brandfetch.io/idVfYwcuQz/theme/dark/symbol.svg?c=1bxid64Mup7aczewSAYMX&t=1728452988041",
+        category="Media",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "youtube-data-mcp-server"],
+            "env": {
+                "YOUTUBE_API_KEY": "${YOUTUBE_API_KEY}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="YOUTUBE_API_KEY", label="API Key", type="password")
+        ]
+    ),
+    SphereApp(
+        id="notion",
+        name="Notion",
+        description="Connect to your Notion workspace and manage pages and databases.",
+        icon="https://cdn.brandfetch.io/notion.so/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Productivity",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@notionhq/notion-mcp-server"],
+            "env": {
+                "NOTION_TOKEN": "${NOTION_TOKEN}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="NOTION_TOKEN", label="Notion Token", type="password")
+        ]
+    ),
+    SphereApp(
+        id="figma",
+        name="Figma",
+        description="Access and manage Figma projects, files, and layers.",
+        icon="https://cdn.brandfetch.io/figma.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Design",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "figma-developer-mcp", "--stdio"],
+            "env": {
+                "FIGMA_API_KEY": "${FIGMA_API_KEY}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="FIGMA_API_KEY", label="Personal Access Token", type="password")
+        ]
+    ),
+    SphereApp(
+        id="mobile",
+        name="Mobile",
+        description="Connect to mobile devices for automation and testing.",
+        icon="https://avatars.githubusercontent.com/u/205340688?s=48&v=4",
+        category="Tooling",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@mobilenext/mobile-mcp"],
+            "env": {}
+        },
+        auth_fields=[]
+    ),
+    SphereApp(
+        id="megic",
+        name="Megic",
+        description="megic mcp powerful AI-driven tool that helps developers create beautiful, modern UI components instantly through natural language descriptions. It integrates seamlessly with popular IDEs and provides a streamlined workflow for UI development.",
+        icon="https://avatars.githubusercontent.com/u/199367026?s=48&v=4",
+        category="Development",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@21st-dev/magic@latest"],
+            "env": {
+                "API_KEY": "${MEGIC_API_KEY}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="MEGIC_API_KEY", label="API Key", type="password")
+        ]
+    ),
+    SphereApp(
+        id="aws-knowledge",
+        name="AWS Knowledge",
+        description="Connect to AWS Knowledge Bases for retrieval-augmented generation.",
+        icon="https://cdn.brandfetch.io/aws.amazon.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Cloud",
+        config_template={
+            "type": "httpx",
+            "url": "https://knowledge-mcp.global.api.aws",
+            "headers": {
+                "Content-Type": "application/json"
+            }
+        },
+        auth_fields=[]
+    ),
+    SphereApp(
+        id="zoho",
+        name="Zoho",
+        description="Connect to Zoho platform using OAuth. Provide your Zoho MCP Server URL and we'll handle authentication.",
+        icon="https://cdn.brandfetch.io/zoho.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Business",
+        config_template={
+            "type": "sse",
+            "url": "${ZOHO_URL}",
+            "auth": "${ZOHO_TOKEN}"
+        },
+        auth_fields=[
+            AuthField(
+                name="ZOHO_MCP_URL", 
+                label="Zoho MCP Server URL", 
+                type="text", 
+                description="Your Zoho MCP Server URL (OAuth metadata will be discovered automatically)"
+            )
+        ],
+        oauth_config=OAuthConfig(
+            provider_name="zoho",
+            authorize_url="DYNAMIC",  # Discovered from server's .well-known
+            token_url="DYNAMIC",       # Discovered from server's .well-known
+            scopes=[],                 # Discovered from server
+            client_id_env="",          # Uses Dynamic Client Registration
+            client_secret_env="",
+            pkce=True,
+            include_client_secret_on_refresh=False, # Public Client DCR
+            token_metadata_map={
+                "ZOHO_URL": "_server_url",
+                "ZOHO_TOKEN": "access_token"
+            }
+        ),
+        is_primary=True
+    ),
+    SphereApp(
+        id="gmail-mcp",
+        name="Gmail",
+        description="Connect and manage your Gmail account.",
+        icon="https://cdn.brandfetch.io/id5o3EIREg/theme/dark/symbol.svg?c=1bxid64Mup7aczewSAYMX&t=1696475443284",
+        category="Storage",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@gongrzhe/server-gmail-autoauth-mcp"],
+            "env": {
+                "GMAIL_CREDENTIALS_PATH": "${GMAIL_TOKEN_PATH}"
+            },
+            "auth": "${GMAIL_TOKEN_PATH}"
+        },
+        auth_fields=[],
+        oauth_config=OAuthConfig(
+            provider_name="google",
+            authorize_url="https://accounts.google.com/o/oauth2/v2/auth",
+            token_url="https://oauth2.googleapis.com/token",
+            scopes=[
+                "https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/gmail.send",
+                "https://www.googleapis.com/auth/gmail.compose",
+                "https://www.googleapis.com/auth/gmail.modify",
+                "https://www.googleapis.com/auth/gmail.labels",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
+                "openid"
+            ],
+            client_id_env="GOOGLE_CLIENT_ID",
+            client_secret_env="GOOGLE_CLIENT_SECRET",
+            pkce=True,
+            credential_files=[
+                CredentialFileDefinition(
+                    filename="gcp-oauth.keys.json",
+                    env_vars=["GMAIL_OAUTH_PATH", "GMAIL_CREDENTIALS_FILE"],
+                    content_template={
+                        "installed": {
+                            "client_id": "${client_id}",
+                            "client_secret": "${client_secret}",
+                            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                            "token_uri": "${token_uri}"
+                        }
+                    }
+                ),
+                CredentialFileDefinition(
+                    filename="credentials.json",
+                    env_vars=["GMAIL_CREDENTIALS_PATH", "GMAIL_TOKEN_PATH", "GMAIL_TOKEN_FILE"],
+                    inject_as_auth=True,
+                    content_template={
+                        "type": "authorized_user",
+                        "client_id": "${client_id}",
+                        "client_secret": "${client_secret}",
+                        "refresh_token": "${refresh_token}",
+                        "access_token": "${token}"
+                    }
+                )
+            ]
+        ),
+        is_primary=True
+    ),
+    SphereApp(
+        id="brave-search",
+        name="Brave Search",
+        description="Web search agent for real-time information.",
+        icon="https://cdn.brandfetch.io/brave.com/w/400/h/400/theme/dark/icon.png?c=1bxid64Mup7aczewSAYMX&t=1671109848386",
+        category="Search",
+        config_template={
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+            "env": {
+                "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+            }
+        },
+        auth_fields=[
+            AuthField(name="BRAVE_API_KEY", label="API Key", type="password")
+        ]
+    )
+]
+
+def get_app_by_id(app_id: str) -> Optional[SphereApp]:
+    for app in SPHERE_REGISTRY:
+        if app.id == app_id:
+            return app
+    return None
+
+def get_all_apps() -> List[SphereApp]:
+    return SPHERE_REGISTRY
+
+def get_primary_app_for_provider(provider_name: str) -> Optional[str]:
+    """Find the default app ID for a given OAuth provider."""
+    # First look for an app marked as primary
+    for app in SPHERE_REGISTRY:
+        if app.is_primary and app.oauth_config and app.oauth_config.provider_name == provider_name:
+            return app.id
+    
+    # Fallback to any app with this provider
+    for app in SPHERE_REGISTRY:
+        if app.oauth_config and app.oauth_config.provider_name == provider_name:
+            return app.id
+            
+    return None
+
+def get_oauth_config_by_provider(provider_name: str) -> Optional[OAuthConfig]:
+    """
+    Look up OAuth provider config from the registry.
+    This replaces the old `core.oauth.registry.get_provider`.
+    """
+    for app in SPHERE_REGISTRY:
+        if app.oauth_config and app.oauth_config.provider_name == provider_name:
+            return app.oauth_config
+    return None
